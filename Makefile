@@ -13,6 +13,10 @@ example2:
 example3:
 	uv run python examples/03_multi_agent.py
 
+# Maestro orchestrator
+run:
+	uv run python -m src.agents.orchestrator $(ARGS)
+
 # Dev
 test:
 	uv run pytest tests/ -v
