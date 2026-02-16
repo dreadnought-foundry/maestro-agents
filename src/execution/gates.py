@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.agents.execution.types import AgentResult
 from src.execution.hooks import Hook, HookContext, HookPoint, HookResult
 from src.workflow.models import Sprint, Step, StepStatus
@@ -132,16 +134,27 @@ class RequiredStepsGate:
         )
 
 
-def create_default_hooks(sprint_type: str = "backend") -> list:
+def create_default_hooks(
+    sprint_type: str = "backend",
+    kanban_dir: Path | None = None,
+    grooming_agent=None,
+) -> list:
     """Create a sensible set of default hooks for a sprint type.
 
     Returns a list of hook instances ready to register.
+    If kanban_dir is provided, includes the GroomingHook (POST_COMPLETION).
     """
+    from src.execution.grooming_hook import GroomingHook
+
     threshold = COVERAGE_THRESHOLDS.get(sprint_type, 80.0)
-    hooks = [
+    hooks: list = [
         CoverageGate(threshold=threshold),
         QualityReviewGate(),
         StepOrderingGate(),
         RequiredStepsGate(),
     ]
+
+    if kanban_dir is not None:
+        hooks.append(GroomingHook(kanban_dir=kanban_dir, grooming_agent=grooming_agent))
+
     return hooks

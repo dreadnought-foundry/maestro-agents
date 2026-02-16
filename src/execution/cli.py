@@ -22,6 +22,7 @@ def main() -> None:
     run_parser = subparsers.add_parser("run", help="Run a sprint")
     run_parser.add_argument("sprint_id", help="Sprint ID to execute")
     run_parser.add_argument("--project-root", default=".", help="Project root path")
+    run_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
 
     status_parser = subparsers.add_parser("status", help="Show sprint status")
     status_parser.add_argument("sprint_id", help="Sprint ID to check")
@@ -49,6 +50,8 @@ async def _run_command(args) -> None:
     from pathlib import Path
 
     backend = InMemoryAdapter(project_name="cli-project")
+    kanban_dir = Path(args.kanban_dir)
+    kanban_path = kanban_dir if kanban_dir.exists() else None
 
     def on_progress(status):
         completed = status["completed_steps"]
@@ -62,6 +65,7 @@ async def _run_command(args) -> None:
             backend=backend,
             project_root=Path(args.project_root),
             on_progress=on_progress,
+            kanban_dir=kanban_path,
         )
         print(f"\nSprint {result.sprint_id}: {'SUCCESS' if result.success else 'FAILED'}")
         print(f"Steps: {result.steps_completed}/{result.steps_total}")

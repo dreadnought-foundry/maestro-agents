@@ -33,10 +33,18 @@ def create_default_registry() -> AgentRegistry:
     return registry
 
 
-def create_hook_registry(sprint_type: str = "backend") -> HookRegistry:
-    """Create a HookRegistry pre-loaded with default gates for a sprint type."""
+def create_hook_registry(
+    sprint_type: str = "backend",
+    kanban_dir: Path | None = None,
+    grooming_agent=None,
+) -> HookRegistry:
+    """Create a HookRegistry pre-loaded with default gates for a sprint type.
+
+    If kanban_dir is provided, includes the GroomingHook (POST_COMPLETION)
+    so grooming triggers automatically after each sprint completes.
+    """
     hook_registry = HookRegistry()
-    for hook in create_default_hooks(sprint_type):
+    for hook in create_default_hooks(sprint_type, kanban_dir=kanban_dir, grooming_agent=grooming_agent):
         hook_registry.register(hook)
     return hook_registry
 
@@ -47,17 +55,29 @@ async def run_sprint(
     agent_registry: AgentRegistry | None = None,
     project_root: Path | None = None,
     on_progress=None,
+    kanban_dir: Path | None = None,
+    synthesizer=None,
+    grooming_agent=None,
 ) -> RunResult:
     """Convenience function to run a sprint with sensible defaults.
 
-    Creates a default registry if none provided.
+    Creates default registries if none provided. When kanban_dir is set,
+    enables artifact generation, LLM synthesis, context filtering, and
+    automatic grooming on sprint completion.
     """
     if agent_registry is None:
         agent_registry = create_default_registry()
+
+    hook_registry = create_hook_registry(
+        kanban_dir=kanban_dir, grooming_agent=grooming_agent,
+    )
 
     runner = SprintRunner(
         backend=backend,
         agent_registry=agent_registry,
         project_root=project_root,
+        hook_registry=hook_registry,
+        kanban_dir=kanban_dir,
+        synthesizer=synthesizer,
     )
     return await runner.run(sprint_id, on_progress=on_progress)
