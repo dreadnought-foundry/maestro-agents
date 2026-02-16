@@ -48,8 +48,9 @@ This means:
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| 25 | Claude Code Agent Executor | planned |
+| 25 | Claude Code Agent Executor | in-progress |
 | 26 | End-to-End Sprint Execution | planned |
+| 27 | Sprint Lifecycle Automation | planned |
 
 ## Success Criteria
 
