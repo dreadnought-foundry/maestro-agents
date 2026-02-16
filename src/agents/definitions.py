@@ -1,4 +1,4 @@
-"""Agent definitions for the maestro v2 workflow system.
+"""Agent definitions for the workflow system.
 
 Four specialized agents that handle planning and management tasks.
 Each is an AgentDefinition with a prompt, tool list, and model selection.
@@ -13,7 +13,7 @@ except ImportError:
     AgentDefinition = None  # type: ignore[assignment,misc]
     HAS_SDK = False
 
-TOOL_PREFIX = "mcp__maestro__"
+TOOL_PREFIX = "mcp__workflow__"
 
 WORKFLOW_TOOLS = [
     f"{TOOL_PREFIX}get_project_status",

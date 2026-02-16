@@ -10,7 +10,6 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from src.adapters.maestro import MaestroAdapter
 from src.adapters.memory import InMemoryAdapter
 from src.agents.definitions import (
     ALL_AGENTS,
@@ -97,12 +96,6 @@ class TestMCPServerFactory:
         server = create_workflow_server(backend)
         assert server is not None
 
-    def test_creates_server_with_maestro_adapter(self, tmp_path):
-        backend = MaestroAdapter(tmp_path)
-        server = create_workflow_server(backend)
-        assert server is not None
-
-
 class TestFullPipeline:
     """End-to-end flow: handler → adapter → verify state."""
 
@@ -142,42 +135,6 @@ class TestFullPipeline:
         status = _parse(result)
         assert status["sprints_done"] == 1
         assert status["progress_pct"] == pytest.approx(33.3, abs=0.1)
-
-    @pytest.mark.asyncio
-    async def test_pipeline_with_maestro_adapter(self, tmp_path):
-        """Same flow but with file-based adapter."""
-        backend = MaestroAdapter(tmp_path)
-
-        result = await create_epic_handler(
-            {"title": "Research", "description": "Market research"},
-            backend,
-        )
-        epic_id = _parse(result)["created"]["id"]
-
-        await create_sprint_handler(
-            {
-                "epic_id": epic_id,
-                "goal": "Competitive analysis",
-                "tasks": json.dumps([
-                    {"name": "Identify competitors"},
-                    {"name": "Compare features"},
-                ]),
-                "deliverables": json.dumps(["Research report"]),
-            },
-            backend,
-        )
-
-        # Verify files exist
-        assert (tmp_path / ".maestro" / "state.json").exists()
-        assert (tmp_path / ".maestro" / "epics" / "e-1.md").exists()
-        assert (tmp_path / ".maestro" / "sprints" / "s-1.md").exists()
-
-        # Read back from fresh adapter
-        backend2 = MaestroAdapter(tmp_path)
-        result = await get_sprint_handler({"sprint_id": "s-1"}, backend2)
-        sprint_data = _parse(result)
-        assert sprint_data["goal"] == "Competitive analysis"
-        assert len(sprint_data["tasks"]) == 2
 
     @pytest.mark.asyncio
     async def test_multiple_epics_with_cross_references(self):

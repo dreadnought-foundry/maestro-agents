@@ -1,4 +1,4 @@
-"""Maestro v2 orchestrator — entry point for the agent system."""
+"""Orchestrator — entry point for the agent system."""
 
 import asyncio
 import os
@@ -9,7 +9,7 @@ os.environ.pop("CLAUDECODE", None)
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient
 
-from ..adapters.maestro import MaestroAdapter
+from ..adapters.memory import InMemoryAdapter
 from ..tools.server import create_workflow_server
 from .definitions import ALL_AGENTS, ALL_TOOLS
 
@@ -18,14 +18,14 @@ async def run_orchestrator(
     user_request: str,
     project_root: str | Path | None = None,
 ):
-    """Run the maestro orchestrator on a user request.
+    """Run the orchestrator on a user request.
 
     Args:
         user_request: What the user wants done.
         project_root: Path to the project. Defaults to cwd.
     """
     root = Path(project_root) if project_root else Path.cwd()
-    backend = MaestroAdapter(root)
+    backend = InMemoryAdapter()
     kanban_dir = root / "kanban"
     workflow_server = create_workflow_server(
         backend, kanban_dir=kanban_dir if kanban_dir.exists() else None
@@ -33,7 +33,7 @@ async def run_orchestrator(
 
     options = ClaudeAgentOptions(
         system_prompt=(
-            "You are Maestro, a universal project workflow assistant. "
+            "You are a universal project workflow assistant. "
             "You help plan and manage projects of any type — coding, research, "
             "marketing, design, devops, business analysis.\n\n"
             "You have four specialized agents you can delegate to:\n"
@@ -46,7 +46,7 @@ async def run_orchestrator(
             "You can also use the workflow tools directly for simple queries."
         ),
         agents=ALL_AGENTS,
-        mcp_servers={"maestro": workflow_server},
+        mcp_servers={"workflow": workflow_server},
         allowed_tools=[*ALL_TOOLS, "Task", "Read", "Glob"],
         permission_mode="acceptEdits",
         max_turns=15,

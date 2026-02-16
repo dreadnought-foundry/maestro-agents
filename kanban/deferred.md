@@ -9,17 +9,6 @@
 - [ ] Production deployment configuration
   ↳ 🔴 High · M · Complexity 2 · (S07)
 
-## File System & Persistence
-
-- [ ] MaestroAdapter full implementation (file-based persistence and lifecycle methods)
-  ↳ 🔴 High · L · Complexity 3 · (S02, S04, S11)
-- [ ] YAML frontmatter parsing for sprint/epic metadata
-  ↳ 🟡 Medium · M · Complexity 2 · (S04)
-- [ ] File locking for concurrent access
-  ↳ 🟡 Medium · M · Complexity 2 · (S04)
-- [ ] Checkpoint to disk for crash recovery
-  ↳ 🟡 Medium · M · Complexity 2 · (S18)
-
 ## Analytics & Metrics
 
 - [ ] Agent execution metrics (tokens, duration) on AgentResult
@@ -107,8 +96,6 @@
   ↳ 🟡 Medium · S · Complexity 1 · (S18)
 - [ ] Notification on pause/failure
   ↳ 🟡 Medium · S · Complexity 2 · (S18)
-- [ ] Concurrent access handling (thread safety)
-  ↳ 🟢 Low · M · Complexity 2 · (S02)
 - [ ] Circular dependency detection
   ↳ 🟢 Low · S · Complexity 1 · (S17)
 

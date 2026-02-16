@@ -27,3 +27,5 @@ class StepContext:
     epic: Epic
     project_root: Path
     previous_outputs: list[AgentResult] = field(default_factory=list)
+    cumulative_deferred: str | None = None
+    cumulative_postmortem: str | None = None

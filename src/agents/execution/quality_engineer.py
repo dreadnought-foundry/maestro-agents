@@ -58,6 +58,21 @@ class QualityEngineerAgent:
                 f"\nExpected deliverables: {', '.join(context.sprint.deliverables)}"
             )
 
+        if context.cumulative_deferred:
+            parts.append(
+                "\n## Deferred Items (from prior sprints)\n"
+                "Check if any deferred items were addressed in this sprint. "
+                "Flag any that remain relevant.\n\n"
+                f"{context.cumulative_deferred}"
+            )
+        if context.cumulative_postmortem:
+            parts.append(
+                "\n## Lessons Learned (from prior sprints)\n"
+                "Verify this sprint follows past lessons. "
+                "Flag violations of established patterns.\n\n"
+                f"{context.cumulative_postmortem}"
+            )
+
         parts.append("\nProvide verdict: 'approve' or 'request_changes'")
         parts.append(
             "List any deferred items or improvements for future sprints."

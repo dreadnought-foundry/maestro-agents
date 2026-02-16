@@ -11,6 +11,7 @@ from typing import Callable
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult, StepContext
 from src.execution.config import RunConfig
+from src.execution.context_selector import select_context
 from src.execution.dependencies import validate_sprint_dependencies
 from src.execution.hooks import HookContext, HookPoint, HookRegistry, HookResult
 from src.workflow.models import StepStatus
@@ -99,6 +100,10 @@ class SprintRunner:
         # --- Dependency check ---
         await validate_sprint_dependencies(sprint_id, self._backend)
 
+        # --- Load cumulative context from kanban files ---
+        cumulative_deferred = self._read_kanban_file("deferred.md")
+        cumulative_postmortem = self._read_kanban_file("postmortem.md")
+
         # Start the sprint (validates TODO -> IN_PROGRESS, creates steps)
         sprint = await self._backend.start_sprint(sprint_id)
         epic = await self._backend.get_epic(sprint.epic_id)
@@ -144,12 +149,22 @@ class SprintRunner:
             step_type = current_step.metadata.get("type", current_step.name)
             agent = self._registry.get_agent(step_type)
 
+            # Filter cumulative context by relevance to this step
+            selected = select_context(
+                step_type=step_type,
+                sprint_goal=sprint.goal,
+                cumulative_deferred=cumulative_deferred,
+                cumulative_postmortem=cumulative_postmortem,
+            )
+
             context = StepContext(
                 step=current_step,
                 sprint=sprint,
                 epic=epic,
                 project_root=self._project_root,
                 previous_outputs=list(agent_results),
+                cumulative_deferred=selected.deferred,
+                cumulative_postmortem=selected.postmortem,
             )
 
             result = await self._execute_with_retry(agent, context)
@@ -252,6 +267,16 @@ class SprintRunner:
         await self._generate_artifacts(sprint, run_result)
 
         return run_result
+
+    def _read_kanban_file(self, filename: str) -> str | None:
+        """Read a file from kanban_dir, returning None if unavailable."""
+        if self._kanban_dir is None:
+            return None
+        path = self._kanban_dir / filename
+        if not path.exists():
+            return None
+        content = path.read_text().strip()
+        return content or None
 
     async def _execute_with_retry(self, agent, context: StepContext) -> AgentResult:
         """Execute an agent, retrying up to config.max_retries on failure."""

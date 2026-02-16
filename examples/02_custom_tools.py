@@ -1,7 +1,7 @@
 """Example 2: Custom tools via MCP.
 
 Define your own tools that Claude can call. This is how you'd expose
-maestro capabilities (sprint status, epic management, etc.) to an agent.
+workflow capabilities (sprint status, epic management, etc.) to an agent.
 """
 
 import asyncio

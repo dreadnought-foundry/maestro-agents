@@ -39,8 +39,6 @@ def main() -> None:
 async def _run_command(args) -> None:
     from pathlib import Path
 
-    # For demo: use InMemoryAdapter with a sample sprint
-    # In production, this would use MaestroAdapter
     backend = InMemoryAdapter(project_name="cli-project")
 
     def on_progress(status):

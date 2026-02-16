@@ -38,6 +38,20 @@ class ProductEngineerAgent:
             parts.append(f"Previous steps completed: {len(context.previous_outputs)}")
         if context.sprint.deliverables:
             parts.append(f"Expected deliverables: {', '.join(context.sprint.deliverables)}")
+        if context.cumulative_deferred:
+            parts.append(
+                "\n## Deferred Items (from prior sprints)\n"
+                "Check if any of these overlap with your current work. "
+                "If you can address any, do so. Otherwise note them as still deferred.\n\n"
+                f"{context.cumulative_deferred}"
+            )
+        if context.cumulative_postmortem:
+            parts.append(
+                "\n## Lessons Learned (from prior sprints)\n"
+                "Apply these lessons to your current work. "
+                "Avoid repeating past mistakes.\n\n"
+                f"{context.cumulative_postmortem}"
+            )
         return "\n".join(parts)
 
     async def _run_claude(self, prompt: str, project_root: Path) -> AgentResult:

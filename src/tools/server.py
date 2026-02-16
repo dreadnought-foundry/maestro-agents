@@ -128,7 +128,7 @@ def create_workflow_server(backend: WorkflowBackend, kanban_dir: Path | None = N
         ])
 
     return create_sdk_mcp_server(
-        name="maestro_workflow",
+        name="workflow",
         version="0.2.0",
         tools=all_tools,
     )

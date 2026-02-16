@@ -1,8 +1,8 @@
 """Example 3: Multi-agent workflow.
 
 Define specialized subagents that the orchestrator can delegate to.
-This pattern maps directly to maestro's agent architecture — each agent
-in maestro/agents/ could become an AgentDefinition here.
+This pattern maps directly to the workflow agent architecture — each agent
+in src/agents/ could become an AgentDefinition here.
 """
 
 import asyncio
