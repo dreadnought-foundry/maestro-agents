@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.agents.execution.types import AgentResult, StepContext
+
+if TYPE_CHECKING:
+    from src.agents.execution.claude_code import ClaudeCodeExecutor
 
 
 class QualityEngineerAgent:
@@ -11,8 +16,17 @@ class QualityEngineerAgent:
     name: str = "quality_engineer"
     description: str = "Reviews code changes and validates against acceptance criteria"
 
-    def __init__(self, model: str = "sonnet") -> None:
+    ALLOWED_TOOLS = [
+        "Read", "Glob", "Grep", "Bash",
+    ]
+
+    def __init__(
+        self,
+        model: str = "sonnet",
+        executor: ClaudeCodeExecutor | None = None,
+    ) -> None:
         self._model = model
+        self._executor = executor
 
     async def execute(self, context: StepContext) -> AgentResult:
         try:
@@ -81,5 +95,14 @@ class QualityEngineerAgent:
         return "\n".join(parts)
 
     async def _run_review(self, prompt: str, project_root: object) -> AgentResult:
-        """Run Claude SDK for review. Separated for testability."""
-        raise NotImplementedError("Real review requires API access")
+        """Run review via claude-agent-sdk. Separated for testability."""
+        if self._executor is None:
+            raise RuntimeError(
+                "No ClaudeCodeExecutor provided. "
+                "Pass executor= to the constructor for real execution."
+            )
+        return await self._executor.run(
+            prompt=prompt,
+            working_dir=project_root,
+            allowed_tools=self.ALLOWED_TOOLS,
+        )

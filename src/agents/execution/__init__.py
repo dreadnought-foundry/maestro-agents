@@ -1,5 +1,6 @@
 """Agent execution infrastructure."""
 
+from src.agents.execution.claude_code import ClaudeCodeExecutor
 from src.agents.execution.mocks import (
     MockProductEngineerAgent,
     MockQualityEngineerAgent,
@@ -15,6 +16,7 @@ from src.agents.execution.types import AgentResult, StepContext
 __all__ = [
     "AgentResult",
     "AgentRegistry",
+    "ClaudeCodeExecutor",
     "ExecutionAgent",
     "MockProductEngineerAgent",
     "MockQualityEngineerAgent",

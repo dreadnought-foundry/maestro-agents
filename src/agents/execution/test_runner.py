@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.agents.execution.types import AgentResult, StepContext
+
+if TYPE_CHECKING:
+    from src.agents.execution.claude_code import ClaudeCodeExecutor
 
 
 class TestRunnerAgent:
@@ -14,8 +18,17 @@ class TestRunnerAgent:
     name: str = "test_runner"
     description: str = "Runs pytest and reports test results with coverage"
 
-    def __init__(self, test_command: str = "pytest") -> None:
+    ALLOWED_TOOLS = [
+        "Bash", "Read", "Glob", "Grep",
+    ]
+
+    def __init__(
+        self,
+        test_command: str = "pytest",
+        executor: ClaudeCodeExecutor | None = None,
+    ) -> None:
         self._test_command = test_command
+        self._executor = executor
 
     async def execute(self, context: StepContext) -> AgentResult:
         try:
@@ -82,5 +95,24 @@ class TestRunnerAgent:
         )
 
     async def _run_tests(self, project_root: Path) -> AgentResult:
-        """Run pytest. Separated for testability."""
-        raise NotImplementedError("Real test execution requires subprocess access")
+        """Run pytest via claude-agent-sdk. Separated for testability."""
+        if self._executor is None:
+            raise RuntimeError(
+                "No ClaudeCodeExecutor provided. "
+                "Pass executor= to the constructor for real execution."
+            )
+        prompt = (
+            f"Run the test suite with: {self._build_command(project_root)}\n"
+            "Report the full output including pass/fail counts and any coverage."
+        )
+        result = await self._executor.run(
+            prompt=prompt,
+            working_dir=project_root,
+            allowed_tools=self.ALLOWED_TOOLS,
+        )
+        # Re-parse the output through our structured parser if we got raw text
+        if result.success and result.output:
+            parsed = self._parse_results(result.output, 0 if result.success else 1)
+            result.test_results = parsed.test_results
+            result.coverage = parsed.coverage
+        return result

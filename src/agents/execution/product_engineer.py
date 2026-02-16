@@ -1,20 +1,33 @@
-"""Product engineer execution agent using Claude Agent SDK."""
+"""Product engineer execution agent using claude-agent-sdk."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.agents.execution.types import AgentResult, StepContext
 
+if TYPE_CHECKING:
+    from src.agents.execution.claude_code import ClaudeCodeExecutor
+
 
 class ProductEngineerAgent:
-    """Execution agent that writes and modifies code using Claude Agent SDK."""
+    """Execution agent that writes and modifies code via claude-agent-sdk."""
 
     name: str = "product_engineer"
     description: str = "Writes and modifies code based on step requirements"
 
-    def __init__(self, model: str = "sonnet") -> None:
+    ALLOWED_TOOLS = [
+        "Read", "Write", "Edit", "Bash", "Glob", "Grep",
+    ]
+
+    def __init__(
+        self,
+        model: str = "sonnet",
+        executor: ClaudeCodeExecutor | None = None,
+    ) -> None:
         self._model = model
+        self._executor = executor
 
     async def execute(self, context: StepContext) -> AgentResult:
         prompt = self._build_prompt(context)
@@ -55,5 +68,14 @@ class ProductEngineerAgent:
         return "\n".join(parts)
 
     async def _run_claude(self, prompt: str, project_root: Path) -> AgentResult:
-        """Run Claude SDK. Separated for testability."""
-        raise NotImplementedError("Real SDK calls require API access")
+        """Run via claude-agent-sdk. Separated for testability."""
+        if self._executor is None:
+            raise RuntimeError(
+                "No ClaudeCodeExecutor provided. "
+                "Pass executor= to the constructor for real execution."
+            )
+        return await self._executor.run(
+            prompt=prompt,
+            working_dir=project_root,
+            allowed_tools=self.ALLOWED_TOOLS,
+        )
