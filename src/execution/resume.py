@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult, StepContext
 from src.workflow.models import SprintStatus, StepStatus
+from src.workflow.transitions import validate_transition
 
 from .runner import RunResult
 
@@ -49,7 +50,8 @@ async def resume_sprint(
             f"Cannot resume sprint {sprint_id}: status is {sprint.status.value}, expected blocked"
         )
 
-    # Transition BLOCKED -> IN_PROGRESS
+    # Transition BLOCKED -> IN_PROGRESS (via state machine)
+    validate_transition(sprint_id, sprint.status, SprintStatus.IN_PROGRESS)
     await backend.update_sprint(sprint_id, status=SprintStatus.IN_PROGRESS)
 
     # Find resume point

@@ -4,7 +4,14 @@ Four specialized agents that handle planning and management tasks.
 Each is an AgentDefinition with a prompt, tool list, and model selection.
 """
 
-from claude_agent_sdk import AgentDefinition
+try:
+    from claude_agent_sdk import AgentDefinition
+
+    HAS_SDK = True
+except ImportError:
+    claude_agent_sdk = None  # type: ignore[assignment]
+    AgentDefinition = None  # type: ignore[assignment,misc]
+    HAS_SDK = False
 
 TOOL_PREFIX = "mcp__maestro__"
 

@@ -29,7 +29,7 @@ Add step-level models that enable tracking individual steps within a sprint exec
 
 ## Interface Contract (define first)
 
-- `StepStatus` enum: PENDING, IN_PROGRESS, COMPLETED, FAILED, SKIPPED
+- `StepStatus` enum: TODO, IN_PROGRESS, DONE, FAILED, SKIPPED
 - `Step` dataclass: id, name, status, agent (str), output (dict|None), started_at, completed_at, metadata
 - `SprintTransition` dataclass: from_status, to_status, timestamp, reason
 - Update `Sprint` model: add `steps: list[Step]` and `transitions: list[SprintTransition]` fields

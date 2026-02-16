@@ -30,9 +30,9 @@ Extend WorkflowBackend protocol with sprint execution operations and state-machi
 ## Interface Contract (define first)
 
 New protocol methods:
-- `start_sprint(sprint_id) -> Sprint` — PLANNED → IN_PROGRESS, creates initial steps
+- `start_sprint(sprint_id) -> Sprint` — TODO → IN_PROGRESS, creates initial steps
 - `advance_step(sprint_id, step_output=None) -> Sprint` — marks current step complete, advances to next
-- `complete_sprint(sprint_id) -> Sprint` — IN_PROGRESS → COMPLETED (only if all steps done)
+- `complete_sprint(sprint_id) -> Sprint` — IN_PROGRESS → DONE (only if all steps done)
 - `block_sprint(sprint_id, reason) -> Sprint` — IN_PROGRESS → BLOCKED
 - `get_step_status(sprint_id) -> dict` — returns current step, progress, step details
 
@@ -41,8 +41,8 @@ New exception:
 
 Valid transitions:
 ```
-PLANNED → IN_PROGRESS (start)
-IN_PROGRESS → COMPLETED (complete, all steps done)
+TODO → IN_PROGRESS (start)
+IN_PROGRESS → DONE (complete, all steps done)
 IN_PROGRESS → BLOCKED (block)
 BLOCKED → IN_PROGRESS (resume)
 ```

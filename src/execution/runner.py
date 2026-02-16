@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,9 @@ from typing import Callable
 
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult, StepContext
+from src.execution.config import RunConfig
+from src.execution.dependencies import validate_sprint_dependencies
+from src.execution.hooks import HookContext, HookPoint, HookRegistry
 from src.workflow.models import StepStatus
 
 
@@ -31,10 +35,28 @@ class SprintRunner:
         backend,
         agent_registry: AgentRegistry,
         project_root: Path | None = None,
+        hook_registry: HookRegistry | None = None,
+        config: RunConfig | None = None,
     ):
         self._backend = backend
         self._registry = agent_registry
         self._project_root = project_root or Path(".")
+        self._hooks = hook_registry
+        self._config = config or RunConfig()
+
+    async def _evaluate_hooks(
+        self,
+        point: HookPoint,
+        context: HookContext,
+    ) -> bool:
+        """Evaluate hooks at a given point. Returns False if a blocking hook failed."""
+        if self._hooks is None:
+            return True
+        results = await self._hooks.evaluate_all(point, context)
+        for result in results:
+            if not result.passed and result.blocking:
+                return False
+        return True
 
     async def run(
         self,
@@ -45,10 +67,30 @@ class SprintRunner:
         start_time = time.monotonic()
         agent_results: list[AgentResult] = []
         deferred_items: list[str] = []
+        run_state: dict = {"agent_results": agent_results}
+
+        # --- Dependency check ---
+        await validate_sprint_dependencies(sprint_id, self._backend)
 
         # Start the sprint (validates TODO -> IN_PROGRESS, creates steps)
         sprint = await self._backend.start_sprint(sprint_id)
         epic = await self._backend.get_epic(sprint.epic_id)
+
+        # --- PRE_SPRINT hooks ---
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        if not await self._evaluate_hooks(HookPoint.PRE_SPRINT, hook_ctx):
+            await self._backend.block_sprint(sprint_id, "PRE_SPRINT hook failed")
+            elapsed = time.monotonic() - start_time
+            step_status = await self._backend.get_step_status(sprint_id)
+            return RunResult(
+                sprint_id=sprint_id,
+                success=False,
+                steps_completed=step_status["completed_steps"],
+                steps_total=step_status["total_steps"],
+                agent_results=agent_results,
+                deferred_items=deferred_items,
+                duration_seconds=elapsed,
+            )
 
         # Iterate through steps
         while True:
@@ -71,7 +113,6 @@ class SprintRunner:
                 break
 
             # Determine the step type for agent dispatch
-            # Use step metadata "type" if set, otherwise use step name
             step_type = current_step.metadata.get("type", current_step.name)
 
             # Get the agent for this step type
@@ -86,14 +127,37 @@ class SprintRunner:
                 previous_outputs=list(agent_results),
             )
 
-            # Execute the agent
-            result = await agent.execute(context)
+            # Execute agent with retry logic
+            result = await self._execute_with_retry(agent, context)
             agent_results.append(result)
 
             # Collect deferred items
             deferred_items.extend(result.deferred_items)
 
-            # If agent failed, block the sprint
+            # --- POST_STEP hooks ---
+            hook_ctx = HookContext(
+                sprint=sprint,
+                step=current_step,
+                agent_result=result,
+                run_state=run_state,
+            )
+            if not await self._evaluate_hooks(HookPoint.POST_STEP, hook_ctx):
+                await self._backend.block_sprint(
+                    sprint_id, f"POST_STEP hook failed for step '{current_step.name}'"
+                )
+                elapsed = time.monotonic() - start_time
+                step_status = await self._backend.get_step_status(sprint_id)
+                return RunResult(
+                    sprint_id=sprint_id,
+                    success=False,
+                    steps_completed=step_status["completed_steps"],
+                    steps_total=step_status["total_steps"],
+                    agent_results=agent_results,
+                    deferred_items=deferred_items,
+                    duration_seconds=elapsed,
+                )
+
+            # If agent failed (even after retries), block the sprint
             if not result.success:
                 await self._backend.block_sprint(
                     sprint_id, f"Step '{current_step.name}' failed: {result.output}"
@@ -118,6 +182,25 @@ class SprintRunner:
                 step_status = await self._backend.get_step_status(sprint_id)
                 on_progress(step_status)
 
+        # --- PRE_COMPLETION hooks ---
+        sprint = await self._backend.get_sprint(sprint_id)
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        if not await self._evaluate_hooks(HookPoint.PRE_COMPLETION, hook_ctx):
+            await self._backend.block_sprint(
+                sprint_id, "PRE_COMPLETION hook failed"
+            )
+            elapsed = time.monotonic() - start_time
+            step_status = await self._backend.get_step_status(sprint_id)
+            return RunResult(
+                sprint_id=sprint_id,
+                success=False,
+                steps_completed=step_status["completed_steps"],
+                steps_total=step_status["total_steps"],
+                agent_results=agent_results,
+                deferred_items=deferred_items,
+                duration_seconds=elapsed,
+            )
+
         # Complete the sprint
         await self._backend.complete_sprint(sprint_id)
         elapsed = time.monotonic() - start_time
@@ -132,3 +215,14 @@ class SprintRunner:
             deferred_items=deferred_items,
             duration_seconds=elapsed,
         )
+
+    async def _execute_with_retry(self, agent, context: StepContext) -> AgentResult:
+        """Execute an agent, retrying up to config.max_retries on failure."""
+        result = await agent.execute(context)
+        retries = 0
+        while not result.success and retries < self._config.max_retries:
+            if self._config.retry_delay_seconds > 0:
+                await asyncio.sleep(self._config.retry_delay_seconds)
+            result = await agent.execute(context)
+            retries += 1
+        return result

@@ -8,6 +8,7 @@ from src.adapters.memory import InMemoryAdapter
 from src.agents.execution.mocks import MockProductEngineerAgent, MockTestRunnerAgent
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
+from src.execution.config import RunConfig
 from src.execution.runner import RunResult, SprintRunner
 from src.workflow.models import SprintStatus
 
@@ -214,7 +215,11 @@ async def test_agent_failure_stops_execution():
     registry.register("implement", failing_agent)
     registry.register("test", second_agent)
 
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(
+        backend=backend,
+        agent_registry=registry,
+        config=RunConfig(max_retries=0),
+    )
     result = await runner.run(sprint_id)
 
     assert result.success is False
