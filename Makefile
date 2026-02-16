@@ -1,3 +1,5 @@
+.PHONY: claude example1 example2 example3 run test run-sprint kanban lint
+
 # Start Claude Code with permissions bypass
 claude:
 	@echo "Starting Claude Code with permissions bypass..."
@@ -23,6 +25,9 @@ test:
 
 run-sprint:
 	uv run python -m src.execution run $(SPRINT) --project-root .
+
+kanban:
+	uv run python -m kanban_tui
 
 lint:
 	uv run python -m py_compile examples/01_simple_query.py

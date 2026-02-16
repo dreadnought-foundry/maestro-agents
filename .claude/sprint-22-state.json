@@ -1,0 +1,23 @@
+{
+  "sprint": 22,
+  "title": "Kanban TUI Application",
+  "epic": 5,
+  "status": "in-progress",
+  "started": "2026-02-15T00:00:00Z",
+  "current_phase": "implementation",
+  "current_step": 1,
+  "steps_completed": [],
+  "steps_remaining": [
+    "Set up kanban_tui package",
+    "Implement folder scanning",
+    "Implement frontmatter parsing",
+    "Build Column widget",
+    "Build EpicCard widget",
+    "Build SprintCard widget",
+    "Build DetailPanel widget",
+    "Implement move action",
+    "Add keybindings and help footer",
+    "Add pyproject.toml with dependencies",
+    "Manual validation"
+  ]
+}
