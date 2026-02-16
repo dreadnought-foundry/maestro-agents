@@ -8,7 +8,6 @@ dependencies = [
     "claude-agent-sdk>=0.1.36",
     "textual>=3.0.0",
     "pyyaml>=6.0",
-    "anthropic>=0.40.0",
 ]
 
 [dependency-groups]

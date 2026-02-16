@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Callable
-
-import anthropic
 
 DEFERRED_SYNTHESIS_PROMPT = """\
 You are synthesizing a project's cumulative deferred-items file.  The input is \
 a raw append log where each sprint added its own section.  Your job is to \
-produce a **single, deduplicated, thematically grouped** version.
+produce a **single, deduplicated, thematically grouped** version with \
+importance/size/complexity ratings.
 
 Rules:
 1. Deduplicate items that refer to the same concept across sprints \
@@ -18,10 +18,14 @@ Rules:
 2. Group items under thematic headings \
    (e.g. "Production Integration", "Analytics & Metrics", "UI/UX", \
     "Infrastructure & DevOps", "Advanced Features").
-3. For each item, note the originating sprint(s) in parentheses, e.g. \
-   `(S01, S03, S05)`.
+3. For each item, include a tag line with three ratings and the originating sprints:
+   - **Importance**: 🔴 High, 🟡 Medium, 🟢 Low
+   - **Size**: S (small, <1 sprint), M (medium, ~1 sprint), L (large, multi-sprint)
+   - **Complexity**: 1 (straightforward), 2 (moderate), 3 (significant design work)
+   Format: `- [ ] Item description` on one line, then \
+   `  ↳ 🔴 High · M · Complexity 2 · (S01, S03, S05)` indented on the next line.
 4. Remove "No deferred items" sections entirely.
-5. Keep checkbox format: `- [ ]` for open items.
+5. Within each thematic group, sort items by importance (High first, then Medium, then Low).
 6. Output must start with exactly `# Deferred Items` on the first line.
 7. Output ONLY the synthesized markdown — no commentary, no code fences.
 """
@@ -48,38 +52,47 @@ Rules:
 
 
 class Synthesizer:
-    """LLM-based synthesis for cumulative artifact files."""
+    """LLM-based synthesis using the claude CLI."""
 
-    def __init__(self, model: str = "claude-sonnet-4-5-20250929"):
-        self._client = anthropic.AsyncAnthropic()
+    def __init__(self, model: str = "sonnet"):
         self._model = model
 
     async def synthesize_deferred(self, path: Path) -> str:
-        """Read deferred.md, synthesize via LLM, write back."""
+        """Read deferred.md, synthesize via claude CLI, write back."""
         content = path.read_text()
         if not content.strip():
             return content
-        result = await self._call_llm(DEFERRED_SYNTHESIS_PROMPT, content)
+        result = await self._call_claude(DEFERRED_SYNTHESIS_PROMPT, content)
         path.write_text(result)
         return result
 
     async def synthesize_postmortem(self, path: Path) -> str:
-        """Read postmortem.md, synthesize via LLM, write back."""
+        """Read postmortem.md, synthesize via claude CLI, write back."""
         content = path.read_text()
         if not content.strip():
             return content
-        result = await self._call_llm(POSTMORTEM_SYNTHESIS_PROMPT, content)
+        result = await self._call_claude(POSTMORTEM_SYNTHESIS_PROMPT, content)
         path.write_text(result)
         return result
 
-    async def _call_llm(self, system_prompt: str, content: str) -> str:
-        response = await self._client.messages.create(
-            model=self._model,
-            max_tokens=4096,
-            system=system_prompt,
-            messages=[{"role": "user", "content": content}],
+    async def _call_claude(self, system_prompt: str, content: str) -> str:
+        import os
+
+        prompt = f"{system_prompt}\n\n---\n\n{content}"
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        proc = await asyncio.create_subprocess_exec(
+            "claude",
+            "--print",
+            "--model", self._model,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
-        return response.content[0].text
+        stdout, stderr = await proc.communicate(input=prompt.encode())
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {stderr.decode()}")
+        return stdout.decode().strip()
 
 
 class MockSynthesizer:
