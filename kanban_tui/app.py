@@ -185,7 +185,12 @@ class MoveScreen(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         if isinstance(self.card, SprintCard):
-            label = f"S-{self.card.sprint.number:02d}"
+            sprint = self.card.sprint
+            parent = sprint.movable_path.parent
+            if parent.name.startswith("epic-"):
+                label = f"Epic (via S-{sprint.number:02d})"
+            else:
+                label = f"S-{sprint.number:02d}"
         else:
             label = f"E-{self.card.epic.number:02d}"
 
@@ -205,11 +210,22 @@ class MoveScreen(ModalScreen[str | None]):
         if target_col is None or target_col == self.current_col:
             return
         target_dir = self.kanban_dir / target_col
-        if isinstance(self.card, SprintCard):
-            src = self.card.sprint.movable_path
-        else:
+
+        if isinstance(self.card, EpicCard):
+            # Move entire epic folder (sprints stay inside)
             src = self.card.epic.path
-        shutil.move(str(src), str(target_dir / src.name))
+            shutil.move(str(src), str(target_dir / src.name))
+        elif isinstance(self.card, SprintCard):
+            sprint = self.card.sprint
+            # If sprint is inside an epic folder, move the whole epic
+            parent = sprint.movable_path.parent
+            if parent.name.startswith("epic-"):
+                shutil.move(str(parent), str(target_dir / parent.name))
+            else:
+                # Standalone sprint — move just the sprint
+                src = sprint.movable_path
+                shutil.move(str(src), str(target_dir / src.name))
+
         self.dismiss(target_col)
 
     def action_cancel(self) -> None:
