@@ -11,7 +11,7 @@ from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ClaudeSDKClie
 
 from ..adapters.maestro import MaestroAdapter
 from ..tools.server import create_workflow_server
-from .definitions import ALL_AGENTS, WORKFLOW_TOOLS
+from .definitions import ALL_AGENTS, ALL_TOOLS
 
 
 async def run_orchestrator(
@@ -26,7 +26,10 @@ async def run_orchestrator(
     """
     root = Path(project_root) if project_root else Path.cwd()
     backend = MaestroAdapter(root)
-    workflow_server = create_workflow_server(backend)
+    kanban_dir = root / "kanban"
+    workflow_server = create_workflow_server(
+        backend, kanban_dir=kanban_dir if kanban_dir.exists() else None
+    )
 
     options = ClaudeAgentOptions(
         system_prompt=(
@@ -44,7 +47,7 @@ async def run_orchestrator(
         ),
         agents=ALL_AGENTS,
         mcp_servers={"maestro": workflow_server},
-        allowed_tools=[*WORKFLOW_TOOLS, "Task", "Read", "Glob"],
+        allowed_tools=[*ALL_TOOLS, "Task", "Read", "Glob"],
         permission_mode="acceptEdits",
         max_turns=15,
     )

@@ -18,6 +18,15 @@ WORKFLOW_TOOLS = [
     f"{TOOL_PREFIX}create_sprint",
 ]
 
+KANBAN_TOOLS = [
+    f"{TOOL_PREFIX}get_board_status",
+    f"{TOOL_PREFIX}get_board_epic",
+    f"{TOOL_PREFIX}get_board_sprint",
+    f"{TOOL_PREFIX}list_board_sprints",
+]
+
+ALL_TOOLS = WORKFLOW_TOOLS + KANBAN_TOOLS
+
 epic_breakdown_agent = AgentDefinition(
     description="Breaks down a big idea or goal into epics and sprints with dependencies",
     prompt=(
@@ -36,7 +45,7 @@ epic_breakdown_agent = AgentDefinition(
         "Think carefully about dependency ordering. Consider both "
         "technical and non-technical work. Be specific — no vague tasks."
     ),
-    tools=[*WORKFLOW_TOOLS, "Read"],
+    tools=[*ALL_TOOLS, "Read"],
     model="sonnet",
 )
 
@@ -58,7 +67,7 @@ sprint_spec_agent = AgentDefinition(
         "Be concrete — every task should be actionable. "
         "Avoid vague items like 'implement feature' or 'set up system'."
     ),
-    tools=WORKFLOW_TOOLS,
+    tools=ALL_TOOLS,
     model="sonnet",
 )
 
@@ -106,7 +115,7 @@ status_report_agent = AgentDefinition(
         "Be honest about problems. Quantify where possible. "
         "Don't sugarcoat — surface issues early."
     ),
-    tools=WORKFLOW_TOOLS,
+    tools=ALL_TOOLS,
     model="sonnet",
 )
 

@@ -14,6 +14,7 @@ from src.adapters.maestro import MaestroAdapter
 from src.adapters.memory import InMemoryAdapter
 from src.agents.definitions import (
     ALL_AGENTS,
+    ALL_TOOLS,
     TOOL_PREFIX,
     WORKFLOW_TOOLS,
     epic_breakdown_agent,
@@ -64,7 +65,7 @@ class TestAgentDefinitions:
         for name, agent in ALL_AGENTS.items():
             for tool_name in agent.tools:
                 if tool_name.startswith(TOOL_PREFIX):
-                    assert tool_name in WORKFLOW_TOOLS, (
+                    assert tool_name in ALL_TOOLS, (
                         f"Agent '{name}' references unknown tool: {tool_name}"
                     )
 
