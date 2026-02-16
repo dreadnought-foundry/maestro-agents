@@ -5,4 +5,6 @@ from .convenience import create_default_registry, create_hook_registry, run_spri
 from .hooks import Hook, HookContext, HookPoint, HookRegistry, HookResult, MockHook
 from .resume import cancel_sprint, find_resume_point, resume_sprint, retry_step
 from .runner import RunResult, SprintRunner
+from .grooming import GroomingAgent, GroomingProposal, MockGroomingAgent
+from .grooming_hook import GroomingHook
 from .synthesizer import MockSynthesizer, Synthesizer

@@ -132,11 +132,25 @@ def _scan_epic(epic_dir: Path, epic_num: int, status: str) -> EpicEntry:
 def _scan_sprint(
     sprint_dir: Path, sprint_num: int, status: str, epic: int | None
 ) -> SprintEntry:
-    spec_files = list(sprint_dir.glob(f"sprint-{sprint_num:02d}_*.md"))
-    if not spec_files:
-        spec_files = list(sprint_dir.glob("*.md"))
+    # The main spec file shares the directory name (e.g. sprint-18_pause-resume-retry.md
+    # inside sprint-18_pause-resume-retry/). Artifact files like _contracts.md, _deferred.md
+    # sort before the spec alphabetically, so we must match the directory name first.
+    _ARTIFACT_SUFFIXES = {"_contracts.md", "_deferred.md", "_postmortem.md", "_quality.md"}
+    spec_file = sprint_dir / f"{sprint_dir.name}.md"
+    if not spec_file.exists():
+        # Fallback: pick first matching .md that isn't a known artifact
+        candidates = [
+            f for f in sorted(sprint_dir.glob(f"sprint-{sprint_num:02d}_*.md"))
+            if not any(f.name.endswith(s) for s in _ARTIFACT_SUFFIXES)
+        ]
+        if not candidates:
+            candidates = [
+                f for f in sorted(sprint_dir.glob("*.md"))
+                if not any(f.name.endswith(s) for s in _ARTIFACT_SUFFIXES)
+            ]
+        spec_file = candidates[0] if candidates else None
 
-    meta = parse_yaml_frontmatter(spec_files[0]) if spec_files else {}
+    meta = parse_yaml_frontmatter(spec_file) if spec_file else {}
 
     yaml_epic = meta.get("epic")
     if yaml_epic and yaml_epic != "null":
@@ -194,3 +208,12 @@ def get_sprints_for_epic(epic_num: int, kanban_dir: Path | None = None) -> list[
         [s for s in scan_board(kanban_dir).sprints.values() if s.epic == epic_num],
         key=lambda s: s.number,
     )
+
+
+def is_epic_complete(epic_num: int, kanban_dir: Path) -> bool:
+    """Check if all sprints in an epic are done."""
+    state = scan_board(kanban_dir)
+    epic = state.epics.get(epic_num)
+    if epic is None or epic.total_sprints == 0:
+        return False
+    return epic.completed_sprints == epic.total_sprints

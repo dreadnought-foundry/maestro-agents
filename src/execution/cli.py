@@ -1,6 +1,8 @@
-"""CLI entry point for sprint execution.
+"""CLI entry point for sprint execution and backlog grooming.
 
-Usage: python -m src.execution run <sprint_id> [--project-root PATH]
+Usage:
+  python -m src.execution run <sprint_id> [--project-root PATH]
+  python -m src.execution groom [--kanban-dir kanban] [--model sonnet] [--epic NUM]
 """
 
 from __future__ import annotations
@@ -24,6 +26,11 @@ def main() -> None:
     status_parser = subparsers.add_parser("status", help="Show sprint status")
     status_parser.add_argument("sprint_id", help="Sprint ID to check")
 
+    groom_parser = subparsers.add_parser("groom", help="Run backlog grooming")
+    groom_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
+    groom_parser.add_argument("--model", default="sonnet", help="Model to use")
+    groom_parser.add_argument("--epic", type=int, default=None, help="Epic number for mid-epic grooming")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -34,6 +41,8 @@ def main() -> None:
         asyncio.run(_run_command(args))
     elif args.command == "status":
         asyncio.run(_status_command(args))
+    elif args.command == "groom":
+        asyncio.run(_groom_command(args))
 
 
 async def _run_command(args) -> None:
@@ -75,6 +84,32 @@ async def _status_command(args) -> None:
         print(f"  Progress: {status['completed_steps']}/{status['total_steps']} ({status['progress_pct']}%)")
     except KeyError as e:
         print(f"Sprint not found: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+async def _groom_command(args) -> None:
+    from pathlib import Path
+
+    from src.execution.grooming import GroomingAgent
+
+    kanban_dir = Path(args.kanban_dir)
+    if not kanban_dir.exists():
+        print(f"Kanban directory not found: {kanban_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    agent = GroomingAgent(model=args.model)
+    try:
+        proposal = await agent.propose(kanban_dir, epic_num=args.epic)
+        print(f"Grooming proposal written to: {proposal.proposal_path}")
+        print(f"Board state: {proposal.board_state_summary}\n")
+        print("--- Proposal Preview ---\n")
+        lines = proposal.raw_markdown.split("\n")
+        for line in lines[:50]:
+            print(line)
+        if len(lines) > 50:
+            print(f"\n... ({len(lines) - 50} more lines in {proposal.proposal_path})")
+    except Exception as e:
+        print(f"Grooming failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -15,6 +15,7 @@ class HookPoint(Enum):
     PRE_STEP = "pre_step"
     POST_STEP = "post_step"
     PRE_COMPLETION = "pre_completion"
+    POST_COMPLETION = "post_completion"
 
 
 @dataclass

@@ -40,7 +40,8 @@ class TestHookPoint:
         assert HookPoint.PRE_STEP.value == "pre_step"
         assert HookPoint.POST_STEP.value == "post_step"
         assert HookPoint.PRE_COMPLETION.value == "pre_completion"
-        assert len(HookPoint) == 4
+        assert HookPoint.POST_COMPLETION.value == "post_completion"
+        assert len(HookPoint) == 5
 
 
 # ---------------------------------------------------------------------------

@@ -266,6 +266,10 @@ class SprintRunner:
         sprint = await self._backend.get_sprint(sprint_id)
         await self._generate_artifacts(sprint, run_result)
 
+        # --- POST_COMPLETION hooks (non-blocking, informational) ---
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        await self._evaluate_hooks(HookPoint.POST_COMPLETION, hook_ctx, hook_results)
+
         return run_result
 
     def _read_kanban_file(self, filename: str) -> str | None:
