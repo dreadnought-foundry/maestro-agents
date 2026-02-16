@@ -8,8 +8,7 @@ from .models import Epic, ProjectState, Sprint
 class WorkflowBackend(Protocol):
     """Interface that any workflow backend must implement.
 
-    Covers plan/manage operations only. Sprint execution
-    (start, advance, complete) is out of scope for this POC.
+    Covers plan/manage operations and sprint execution lifecycle.
     """
 
     async def get_project_state(self) -> ProjectState: ...
@@ -36,3 +35,17 @@ class WorkflowBackend(Protocol):
     async def update_sprint(self, sprint_id: str, **fields) -> Sprint: ...
 
     async def get_status_summary(self) -> dict: ...
+
+    # Sprint execution lifecycle methods
+
+    async def start_sprint(self, sprint_id: str) -> Sprint: ...
+
+    async def advance_step(
+        self, sprint_id: str, step_output: dict | None = None
+    ) -> Sprint: ...
+
+    async def complete_sprint(self, sprint_id: str) -> Sprint: ...
+
+    async def block_sprint(self, sprint_id: str, reason: str) -> Sprint: ...
+
+    async def get_step_status(self, sprint_id: str) -> dict: ...
