@@ -21,6 +21,9 @@ run:
 test:
 	uv run pytest tests/ -v
 
+run-sprint:
+	uv run python -m src.execution run $(SPRINT) --project-root .
+
 lint:
 	uv run python -m py_compile examples/01_simple_query.py
 	uv run python -m py_compile examples/02_custom_tools.py
