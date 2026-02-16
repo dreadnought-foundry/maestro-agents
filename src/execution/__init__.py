@@ -1,3 +1,4 @@
+from .artifacts import ArtifactGenerator, SprintArtifacts
 from .config import RunConfig
 from .convenience import create_default_registry, create_hook_registry, run_sprint
 from .hooks import Hook, HookContext, HookPoint, HookRegistry, HookResult, MockHook
