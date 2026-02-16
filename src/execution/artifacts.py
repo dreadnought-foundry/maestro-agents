@@ -222,6 +222,15 @@ class ArtifactGenerator:
 
         return path
 
+    async def append_and_synthesize_deferred(
+        self, kanban_dir: Path, synthesizer=None
+    ) -> Path:
+        """Append new deferred items then optionally synthesize the file."""
+        path = self.append_to_cumulative_deferred(kanban_dir)
+        if synthesizer is not None:
+            await synthesizer.synthesize_deferred(path)
+        return path
+
     def append_to_cumulative_postmortem(self, kanban_dir: Path) -> Path:
         """Append sprint lessons to kanban/postmortem.md."""
         kanban_dir.mkdir(parents=True, exist_ok=True)
@@ -242,4 +251,13 @@ class ArtifactGenerator:
             with open(path, "a") as f:
                 f.write(section)
 
+        return path
+
+    async def append_and_synthesize_postmortem(
+        self, kanban_dir: Path, synthesizer=None
+    ) -> Path:
+        """Append sprint lessons then optionally synthesize the file."""
+        path = self.append_to_cumulative_postmortem(kanban_dir)
+        if synthesizer is not None:
+            await synthesizer.synthesize_postmortem(path)
         return path

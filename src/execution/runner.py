@@ -40,6 +40,7 @@ class SprintRunner:
         config: RunConfig | None = None,
         artifact_dir: Path | None = None,
         kanban_dir: Path | None = None,
+        synthesizer=None,
     ):
         self._backend = backend
         self._registry = agent_registry
@@ -48,6 +49,7 @@ class SprintRunner:
         self._config = config or RunConfig()
         self._artifact_dir = artifact_dir
         self._kanban_dir = kanban_dir
+        self._synthesizer = synthesizer
 
     async def _evaluate_hooks(
         self,
@@ -65,7 +67,7 @@ class SprintRunner:
                 return False
         return True
 
-    def _generate_artifacts(self, sprint, run_result: RunResult) -> None:
+    async def _generate_artifacts(self, sprint, run_result: RunResult) -> None:
         """Generate artifact files if artifact_dir or kanban_dir are configured."""
         from src.execution.artifacts import ArtifactGenerator
 
@@ -75,8 +77,12 @@ class SprintRunner:
             generator.write_sprint_artifacts(self._artifact_dir)
 
         if self._kanban_dir is not None:
-            generator.append_to_cumulative_deferred(self._kanban_dir)
-            generator.append_to_cumulative_postmortem(self._kanban_dir)
+            await generator.append_and_synthesize_deferred(
+                self._kanban_dir, synthesizer=self._synthesizer
+            )
+            await generator.append_and_synthesize_postmortem(
+                self._kanban_dir, synthesizer=self._synthesizer
+            )
 
     async def run(
         self,
@@ -114,7 +120,7 @@ class SprintRunner:
                 hook_results=hook_results,
             )
             sprint = await self._backend.get_sprint(sprint_id)
-            self._generate_artifacts(sprint, result)
+            await self._generate_artifacts(sprint, result)
             return result
 
         # Iterate through steps
@@ -174,7 +180,7 @@ class SprintRunner:
                     hook_results=hook_results,
                 )
                 sprint = await self._backend.get_sprint(sprint_id)
-                self._generate_artifacts(sprint, run_result)
+                await self._generate_artifacts(sprint, run_result)
                 return run_result
 
             if not result.success:
@@ -194,7 +200,7 @@ class SprintRunner:
                     hook_results=hook_results,
                 )
                 sprint = await self._backend.get_sprint(sprint_id)
-                self._generate_artifacts(sprint, run_result)
+                await self._generate_artifacts(sprint, run_result)
                 return run_result
 
             await self._backend.advance_step(sprint_id, {"output": result.output})
@@ -223,7 +229,7 @@ class SprintRunner:
                 hook_results=hook_results,
             )
             sprint = await self._backend.get_sprint(sprint_id)
-            self._generate_artifacts(sprint, run_result)
+            await self._generate_artifacts(sprint, run_result)
             return run_result
 
         # Complete the sprint
@@ -243,7 +249,7 @@ class SprintRunner:
         )
 
         sprint = await self._backend.get_sprint(sprint_id)
-        self._generate_artifacts(sprint, run_result)
+        await self._generate_artifacts(sprint, run_result)
 
         return run_result
 
