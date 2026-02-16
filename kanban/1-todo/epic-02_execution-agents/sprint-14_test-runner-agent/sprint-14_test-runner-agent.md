@@ -1,5 +1,5 @@
 ---
-sprint: 6
+sprint: 14
 title: "Test Runner Agent"
 type: backend
 epic: 2
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 06: Test Runner Agent
+# Sprint 14: Test Runner Agent
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 6 |
+| Sprint | 14 |
 | Title | Test Runner Agent |
 | Type | backend |
 | Epic | 2 |
@@ -83,7 +83,7 @@ Implements `ExecutionAgent` protocol. Runs the test suite and returns structured
 
 ## Dependencies
 
-- **Sprints**: Sprint 4 (agent infrastructure)
+- **Sprints**: Sprint 12 (agent infrastructure)
 - **External**: None
 
 ## Deferred Items

@@ -1,5 +1,5 @@
 ---
-sprint: 4
+sprint: 12
 title: "Agent Base Infrastructure"
 type: backend
 epic: 2
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 04: Agent Base Infrastructure
+# Sprint 12: Agent Base Infrastructure
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 4 |
+| Sprint | 12 |
 | Title | Agent Base Infrastructure |
 | Type | backend |
 | Epic | 2 |
@@ -96,7 +96,7 @@ class AgentRegistry:
 
 ## Dependencies
 
-- **Sprints**: Sprint 1 (Step model for StepContext)
+- **Sprints**: Sprint 09 (Step model for StepContext)
 - **External**: None
 
 ## Deferred Items

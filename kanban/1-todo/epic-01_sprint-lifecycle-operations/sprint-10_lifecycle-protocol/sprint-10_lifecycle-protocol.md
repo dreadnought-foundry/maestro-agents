@@ -1,5 +1,5 @@
 ---
-sprint: 2
+sprint: 10
 title: "Lifecycle Protocol Methods"
 type: backend
 epic: 1
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 02: Lifecycle Protocol Methods
+# Sprint 10: Lifecycle Protocol Methods
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 2 |
+| Sprint | 10 |
 | Title | Lifecycle Protocol Methods |
 | Type | backend |
 | Epic | 1 |
@@ -84,7 +84,7 @@ BLOCKED → IN_PROGRESS (resume)
 
 ## Dependencies
 
-- **Sprints**: Sprint 1 (Step model)
+- **Sprints**: Sprint 09 (Step model)
 - **External**: None
 
 ## Deferred Items

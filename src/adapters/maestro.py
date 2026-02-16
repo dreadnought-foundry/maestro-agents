@@ -221,7 +221,7 @@ status: {sprint.status.value}
         sprint = Sprint(
             id=f"s-{next_num}",
             goal=goal,
-            status=SprintStatus.PLANNED,
+            status=SprintStatus.TODO,
             epic_id=epic_id,
             tasks=tasks or [],
             dependencies=dependencies or [],
@@ -250,18 +250,18 @@ status: {sprint.status.value}
     async def get_status_summary(self) -> dict:
         state = await self._load_state()
         total = len(state.sprints)
-        completed = sum(1 for s in state.sprints if s.status is SprintStatus.COMPLETED)
+        completed = sum(1 for s in state.sprints if s.status is SprintStatus.DONE)
         in_progress = sum(1 for s in state.sprints if s.status is SprintStatus.IN_PROGRESS)
         blocked = sum(1 for s in state.sprints if s.status is SprintStatus.BLOCKED)
-        planned = sum(1 for s in state.sprints if s.status is SprintStatus.PLANNED)
+        planned = sum(1 for s in state.sprints if s.status is SprintStatus.TODO)
 
         return {
             "project_name": state.project_name,
             "total_epics": len(state.epics),
             "total_sprints": total,
-            "sprints_completed": completed,
+            "sprints_done": completed,
             "sprints_in_progress": in_progress,
             "sprints_blocked": blocked,
-            "sprints_planned": planned,
+            "sprints_todo": planned,
             "progress_pct": round(completed / total * 100, 1) if total > 0 else 0.0,
         }

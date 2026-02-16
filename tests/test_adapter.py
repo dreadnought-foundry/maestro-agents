@@ -108,7 +108,7 @@ class TestStatusSummary:
         summary = await seeded_adapter.get_status_summary()
         assert summary["total_epics"] == 1
         assert summary["total_sprints"] == 2
-        assert summary["sprints_planned"] == 2
+        assert summary["sprints_todo"] == 2
         assert summary["progress_pct"] == 0.0
 
     @pytest.mark.asyncio

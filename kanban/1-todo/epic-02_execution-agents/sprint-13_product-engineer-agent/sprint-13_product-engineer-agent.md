@@ -1,5 +1,5 @@
 ---
-sprint: 5
+sprint: 13
 title: "Product Engineer Agent"
 type: backend
 epic: 2
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 05: Product Engineer Agent
+# Sprint 13: Product Engineer Agent
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 5 |
+| Sprint | 13 |
 | Title | Product Engineer Agent |
 | Type | backend |
 | Epic | 2 |
@@ -70,7 +70,7 @@ Implements `ExecutionAgent` protocol. Given a StepContext describing what code t
 
 ## Dependencies
 
-- **Sprints**: Sprint 4 (agent infrastructure)
+- **Sprints**: Sprint 12 (agent infrastructure)
 - **External**: None
 
 ## Deferred Items

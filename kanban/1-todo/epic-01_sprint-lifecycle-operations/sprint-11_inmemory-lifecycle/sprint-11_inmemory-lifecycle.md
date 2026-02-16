@@ -1,5 +1,5 @@
 ---
-sprint: 3
+sprint: 11
 title: "InMemory Lifecycle Implementation"
 type: backend
 epic: 1
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 03: InMemory Lifecycle Implementation
+# Sprint 11: InMemory Lifecycle Implementation
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 3 |
+| Sprint | 11 |
 | Title | InMemory Lifecycle Implementation |
 | Type | backend |
 | Epic | 1 |
@@ -29,7 +29,7 @@ Implement all lifecycle operations in InMemoryAdapter so the sprint runner can b
 
 ## Interface Contract
 
-Implements the 5 new protocol methods from Sprint 2 with in-memory state.
+Implements the 5 new protocol methods from Sprint 10 with in-memory state.
 
 ## TDD Plan
 
@@ -52,7 +52,7 @@ Implements the 5 new protocol methods from Sprint 2 with in-memory state.
 - [ ] Add complete_sprint — validate all steps done, set status
 - [ ] Add block_sprint — set status, record reason in transition
 - [ ] Add get_step_status — return current step, progress percentage, step details
-- [ ] Add transition validation using rules from Sprint 2
+- [ ] Add transition validation using rules from Sprint 10
 
 ### Phase 3: Validation
 - [ ] Write 25 tests
@@ -73,7 +73,7 @@ Implements the 5 new protocol methods from Sprint 2 with in-memory state.
 
 ## Dependencies
 
-- **Sprints**: Sprint 2 (lifecycle protocol)
+- **Sprints**: Sprint 10 (lifecycle protocol)
 - **External**: None
 
 ## Deferred Items

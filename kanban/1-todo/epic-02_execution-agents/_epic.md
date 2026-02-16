@@ -54,16 +54,16 @@ Each agent sprint follows:
 
 ## Parallelism
 
-s-5, s-6, s-7 are fully independent — different agents, same ExecutionAgent interface. Can be built simultaneously.
+s-13, s-14, s-15 are fully independent — different agents, same ExecutionAgent interface. Can be built simultaneously.
 
 ## Sprints
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| 04 | Agent Base Infrastructure | planned |
-| 05 | Product Engineer Agent | planned |
-| 06 | Test Runner Agent | planned |
-| 07 | Quality Engineer Agent | planned |
+| 12 | Agent Base Infrastructure | planned |
+| 13 | Product Engineer Agent | planned |
+| 14 | Test Runner Agent | planned |
+| 15 | Quality Engineer Agent | planned |
 
 ## Success Criteria
 

@@ -1,5 +1,5 @@
 ---
-sprint: 7
+sprint: 15
 title: "Quality Engineer Agent"
 type: backend
 epic: 2
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 07: Quality Engineer Agent
+# Sprint 15: Quality Engineer Agent
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 7 |
+| Sprint | 15 |
 | Title | Quality Engineer Agent |
 | Type | backend |
 | Epic | 2 |
@@ -70,7 +70,7 @@ Implements `ExecutionAgent` protocol. Reviews the work done in previous steps an
 
 ## Dependencies
 
-- **Sprints**: Sprint 4 (agent infrastructure)
+- **Sprints**: Sprint 12 (agent infrastructure)
 - **External**: None
 
 ## Deferred Items

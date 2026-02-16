@@ -37,9 +37,9 @@ New models:
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| 01 | Step Models and Status Tracking | planned |
-| 02 | Lifecycle Protocol Methods | planned |
-| 03 | InMemory Lifecycle Implementation | planned |
+| 09 | Step Models and Status Tracking | planned |
+| 10 | Lifecycle Protocol Methods | planned |
+| 11 | InMemory Lifecycle Implementation | planned |
 
 ## Success Criteria
 
@@ -50,7 +50,7 @@ New models:
 
 ## Deferred Items
 
-- MaestroAdapter lifecycle implementation → could be Sprint 14+ or done alongside s-3
+- MaestroAdapter lifecycle implementation → could be Sprint 22+ or done alongside s-11
 - Step-level timing analytics → feeds into a future analytics epic
 - Transition audit log querying → future reporting enhancement
 

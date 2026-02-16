@@ -130,17 +130,17 @@ class TestFullPipeline:
         status = _parse(result)
         assert status["total_epics"] == 1
         assert status["total_sprints"] == 3
-        assert status["sprints_planned"] == 3
+        assert status["sprints_todo"] == 3
         assert status["progress_pct"] == 0.0
 
         # Complete one sprint
         sprints = await backend.list_sprints()
-        await backend.update_sprint(sprints[0].id, status=SprintStatus.COMPLETED)
+        await backend.update_sprint(sprints[0].id, status=SprintStatus.DONE)
 
         # Verify progress updated
         result = await get_project_status_handler({}, backend)
         status = _parse(result)
-        assert status["sprints_completed"] == 1
+        assert status["sprints_done"] == 1
         assert status["progress_pct"] == pytest.approx(33.3, abs=0.1)
 
     @pytest.mark.asyncio

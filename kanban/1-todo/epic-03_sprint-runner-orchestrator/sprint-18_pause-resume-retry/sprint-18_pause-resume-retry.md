@@ -1,5 +1,5 @@
 ---
-sprint: 10
+sprint: 18
 title: "Pause, Resume, and Retry Logic"
 type: backend
 epic: 3
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 10: Pause, Resume, and Retry Logic
+# Sprint 18: Pause, Resume, and Retry Logic
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 10 |
+| Sprint | 18 |
 | Title | Pause, Resume, and Retry Logic |
 | Type | backend |
 | Epic | 3 |
@@ -82,7 +82,7 @@ class RunConfig:
 
 ## Dependencies
 
-- **Sprints**: Sprint 8 (core runner)
+- **Sprints**: Sprint 16 (core runner)
 - **External**: None
 
 ## Deferred Items

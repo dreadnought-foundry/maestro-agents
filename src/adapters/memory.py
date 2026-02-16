@@ -73,7 +73,7 @@ class InMemoryAdapter:
         sprint = Sprint(
             id=sprint_id,
             goal=goal,
-            status=SprintStatus.PLANNED,
+            status=SprintStatus.TODO,
             epic_id=epic_id,
             tasks=tasks or [],
             dependencies=dependencies or [],
@@ -96,18 +96,18 @@ class InMemoryAdapter:
 
     async def get_status_summary(self) -> dict:
         total_sprints = len(self._sprints)
-        completed = sum(1 for s in self._sprints.values() if s.status is SprintStatus.COMPLETED)
+        completed = sum(1 for s in self._sprints.values() if s.status is SprintStatus.DONE)
         in_progress = sum(1 for s in self._sprints.values() if s.status is SprintStatus.IN_PROGRESS)
         blocked = sum(1 for s in self._sprints.values() if s.status is SprintStatus.BLOCKED)
-        planned = sum(1 for s in self._sprints.values() if s.status is SprintStatus.PLANNED)
+        planned = sum(1 for s in self._sprints.values() if s.status is SprintStatus.TODO)
 
         return {
             "project_name": self._project_name,
             "total_epics": len(self._epics),
             "total_sprints": total_sprints,
-            "sprints_completed": completed,
+            "sprints_done": completed,
             "sprints_in_progress": in_progress,
             "sprints_blocked": blocked,
-            "sprints_planned": planned,
+            "sprints_todo": planned,
             "progress_pct": round(completed / total_sprints * 100, 1) if total_sprints > 0 else 0.0,
         }

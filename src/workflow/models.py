@@ -1,21 +1,55 @@
 """Domain models for the workflow system."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 
 
 class SprintStatus(Enum):
-    PLANNED = "planned"
+    BACKLOG = "backlog"
+    TODO = "todo"
     IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
+    DONE = "done"
     BLOCKED = "blocked"
     ABANDONED = "abandoned"
+    ARCHIVED = "archived"
+
+
+class StepStatus(Enum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class EpicStatus(Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     COMPLETED = "completed"
+
+
+@dataclass
+class Step:
+    id: str
+    name: str
+    status: StepStatus = StepStatus.TODO
+    agent: str | None = None
+    output: dict | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class SprintTransition:
+    from_status: SprintStatus
+    to_status: SprintStatus
+    timestamp: datetime
+    reason: str | None = None
 
 
 @dataclass
@@ -27,6 +61,8 @@ class Sprint:
     tasks: list[dict] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
     deliverables: list[str] = field(default_factory=list)
+    steps: list[Step] = field(default_factory=list)
+    transitions: list[SprintTransition] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
 
 

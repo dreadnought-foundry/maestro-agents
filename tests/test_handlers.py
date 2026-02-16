@@ -71,7 +71,7 @@ class TestGetProjectStatus:
         data = _parse_result(result)
         assert data["total_epics"] == 1
         assert data["total_sprints"] == 2
-        assert data["sprints_planned"] == 2
+        assert data["sprints_todo"] == 2
 
 
 # --- list_epics ---

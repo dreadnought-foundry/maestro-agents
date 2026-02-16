@@ -80,9 +80,9 @@ These feed back into sprint planning, creating continuous improvement.
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| 11 | Hook System Architecture | planned |
-| 12 | Concrete Enforcement Gates | planned |
-| 13 | End-to-End Integration and CLI | planned |
+| 19 | Hook System Architecture | planned |
+| 20 | Concrete Enforcement Gates | planned |
+| 21 | End-to-End Integration and CLI | planned |
 
 ## Success Criteria
 

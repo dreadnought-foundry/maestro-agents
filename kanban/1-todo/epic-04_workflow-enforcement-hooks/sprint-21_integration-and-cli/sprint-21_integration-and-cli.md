@@ -1,5 +1,5 @@
 ---
-sprint: 13
+sprint: 21
 title: "End-to-End Integration and CLI"
 type: backend
 epic: 4
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 13: End-to-End Integration and CLI
+# Sprint 21: End-to-End Integration and CLI
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 13 |
+| Sprint | 21 |
 | Title | End-to-End Integration and CLI |
 | Type | backend |
 | Epic | 4 |
@@ -62,7 +62,7 @@ Wire everything together: convenience functions, CLI entry point, full integrati
 
 ## Dependencies
 
-- **Sprints**: Sprint 9 (dependency checking), Sprint 10 (pause/resume), Sprint 12 (enforcement gates)
+- **Sprints**: Sprint 17 (dependency checking), Sprint 18 (pause/resume), Sprint 20 (enforcement gates)
 - **External**: None
 
 ## Deferred Items

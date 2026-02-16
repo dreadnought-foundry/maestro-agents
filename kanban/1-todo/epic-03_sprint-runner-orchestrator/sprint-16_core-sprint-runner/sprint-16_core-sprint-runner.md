@@ -1,5 +1,5 @@
 ---
-sprint: 8
+sprint: 16
 title: "Core Sprint Runner"
 type: backend
 epic: 3
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 08: Core Sprint Runner
+# Sprint 16: Core Sprint Runner
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 8 |
+| Sprint | 16 |
 | Title | Core Sprint Runner |
 | Type | backend |
 | Epic | 3 |
@@ -87,7 +87,7 @@ class RunResult:
 
 ## Dependencies
 
-- **Sprints**: Sprint 3 (InMemory lifecycle), Sprint 4 (agent infrastructure)
+- **Sprints**: Sprint 11 (InMemory lifecycle), Sprint 12 (agent infrastructure)
 - **External**: None
 
 ## Deferred Items

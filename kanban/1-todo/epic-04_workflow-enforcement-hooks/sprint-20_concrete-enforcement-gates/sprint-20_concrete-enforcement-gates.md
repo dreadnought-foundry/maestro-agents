@@ -1,5 +1,5 @@
 ---
-sprint: 12
+sprint: 20
 title: "Concrete Enforcement Gates"
 type: backend
 epic: 4
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 12: Concrete Enforcement Gates
+# Sprint 20: Concrete Enforcement Gates
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 12 |
+| Sprint | 20 |
 | Title | Concrete Enforcement Gates |
 | Type | backend |
 | Epic | 4 |
@@ -29,7 +29,7 @@ Implement the actual quality gates: coverage thresholds, quality review requirem
 
 ## Interface Contract
 
-Each gate implements the Hook protocol from Sprint 11.
+Each gate implements the Hook protocol from Sprint 19.
 
 ## TDD Plan
 
@@ -72,7 +72,7 @@ Each gate implements the Hook protocol from Sprint 11.
 
 ## Dependencies
 
-- **Sprints**: Sprint 11 (hook system), Sprint 6 (test runner agent), Sprint 7 (quality engineer agent)
+- **Sprints**: Sprint 19 (hook system), Sprint 14 (test runner agent), Sprint 15 (quality engineer agent)
 - **External**: None
 
 ## Deferred Items

@@ -68,9 +68,9 @@ SprintRunner.run(sprint_id)
 
 | Sprint | Title | Status |
 |--------|-------|--------|
-| 08 | Core Sprint Runner | planned |
-| 09 | Dependency Checking and Step Ordering | planned |
-| 10 | Pause, Resume, and Retry Logic | planned |
+| 16 | Core Sprint Runner | planned |
+| 17 | Dependency Checking and Step Ordering | planned |
+| 18 | Pause, Resume, and Retry Logic | planned |
 
 ## Success Criteria
 

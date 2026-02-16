@@ -1,5 +1,5 @@
 ---
-sprint: 11
+sprint: 19
 title: "Hook System Architecture"
 type: backend
 epic: 4
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 11: Hook System Architecture
+# Sprint 19: Hook System Architecture
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 11 |
+| Sprint | 19 |
 | Title | Hook System Architecture |
 | Type | backend |
 | Epic | 4 |
@@ -100,7 +100,7 @@ class HookRegistry:
 
 ## Dependencies
 
-- **Sprints**: Sprint 8 (core runner)
+- **Sprints**: Sprint 16 (core runner)
 - **External**: None
 
 ## Deferred Items

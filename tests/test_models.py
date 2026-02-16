@@ -13,14 +13,16 @@ from src.workflow.models import (
 
 class TestSprintStatus:
     def test_all_values(self):
-        assert SprintStatus.PLANNED.value == "planned"
+        assert SprintStatus.BACKLOG.value == "backlog"
+        assert SprintStatus.TODO.value == "todo"
         assert SprintStatus.IN_PROGRESS.value == "in_progress"
-        assert SprintStatus.COMPLETED.value == "completed"
+        assert SprintStatus.DONE.value == "done"
         assert SprintStatus.BLOCKED.value == "blocked"
         assert SprintStatus.ABANDONED.value == "abandoned"
+        assert SprintStatus.ARCHIVED.value == "archived"
 
     def test_from_value(self):
-        assert SprintStatus("planned") is SprintStatus.PLANNED
+        assert SprintStatus("todo") is SprintStatus.TODO
 
 
 class TestEpicStatus:
@@ -32,14 +34,14 @@ class TestEpicStatus:
 
 class TestSprint:
     def test_required_fields(self):
-        s = Sprint(id="s-1", goal="Build auth", status=SprintStatus.PLANNED, epic_id="e-1")
+        s = Sprint(id="s-1", goal="Build auth", status=SprintStatus.TODO, epic_id="e-1")
         assert s.id == "s-1"
         assert s.goal == "Build auth"
-        assert s.status is SprintStatus.PLANNED
+        assert s.status is SprintStatus.TODO
         assert s.epic_id == "e-1"
 
     def test_defaults(self):
-        s = Sprint(id="s-1", goal="x", status=SprintStatus.PLANNED, epic_id="e-1")
+        s = Sprint(id="s-1", goal="x", status=SprintStatus.TODO, epic_id="e-1")
         assert s.tasks == []
         assert s.dependencies == []
         assert s.deliverables == []
@@ -87,7 +89,7 @@ class TestProjectState:
 
     def test_with_data(self):
         epic = Epic(id="e-1", title="Auth", description="desc", status=EpicStatus.ACTIVE)
-        sprint = Sprint(id="s-1", goal="Build it", status=SprintStatus.PLANNED, epic_id="e-1")
+        sprint = Sprint(id="s-1", goal="Build it", status=SprintStatus.TODO, epic_id="e-1")
         p = ProjectState(
             project_name="test",
             epics=[epic],

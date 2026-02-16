@@ -52,7 +52,7 @@ class TestCreateSprint:
     async def test_defaults_to_planned(self, adapter):
         epic = await adapter.create_epic("E", "d")
         s = await adapter.create_sprint(epic.id, "goal")
-        assert s.status is SprintStatus.PLANNED
+        assert s.status is SprintStatus.TODO
 
     @pytest.mark.asyncio
     async def test_with_all_optional_fields(self, adapter):
@@ -143,11 +143,11 @@ class TestStatusSummary:
         e = await adapter.create_epic("E", "d")
         s1 = await adapter.create_sprint(e.id, "S1")
         s2 = await adapter.create_sprint(e.id, "S2")
-        await adapter.update_sprint(s1.id, status=SprintStatus.COMPLETED)
+        await adapter.update_sprint(s1.id, status=SprintStatus.DONE)
 
         summary = await adapter.get_status_summary()
-        assert summary["sprints_completed"] == 1
-        assert summary["sprints_planned"] == 1
+        assert summary["sprints_done"] == 1
+        assert summary["sprints_todo"] == 1
         assert summary["progress_pct"] == 50.0
 
     @pytest.mark.asyncio

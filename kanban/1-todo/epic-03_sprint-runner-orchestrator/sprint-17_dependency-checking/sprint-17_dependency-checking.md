@@ -1,5 +1,5 @@
 ---
-sprint: 9
+sprint: 17
 title: "Dependency Checking and Step Ordering"
 type: backend
 epic: 3
@@ -10,13 +10,13 @@ completed: null
 hours: null
 ---
 
-# Sprint 09: Dependency Checking and Step Ordering
+# Sprint 17: Dependency Checking and Step Ordering
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | 9 |
+| Sprint | 17 |
 | Title | Dependency Checking and Step Ordering |
 | Type | backend |
 | Epic | 3 |
@@ -79,7 +79,7 @@ async def validate_step_order(sprint, current_step) -> bool
 
 ## Dependencies
 
-- **Sprints**: Sprint 8 (core runner)
+- **Sprints**: Sprint 16 (core runner)
 - **External**: None
 
 ## Deferred Items
