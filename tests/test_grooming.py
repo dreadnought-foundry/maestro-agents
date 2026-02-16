@@ -67,7 +67,6 @@ def _make_kanban(tmp_path: Path, deferred: str = "", postmortem: str = ""):
 
 
 class TestMockGroomingAgent:
-    @pytest.mark.asyncio
     async def test_returns_canned_proposal(self, tmp_path):
         agent = MockGroomingAgent()
         proposal = await agent.propose(tmp_path)
@@ -75,7 +74,6 @@ class TestMockGroomingAgent:
         assert "Grooming Proposal" in proposal.raw_markdown
         assert proposal.proposal_path == tmp_path / "grooming_proposal.md"
 
-    @pytest.mark.asyncio
     async def test_tracks_call_count(self, tmp_path):
         agent = MockGroomingAgent()
         assert agent.call_count == 0
@@ -84,7 +82,6 @@ class TestMockGroomingAgent:
         assert agent.call_count == 2
         assert agent.last_epic_num == 3
 
-    @pytest.mark.asyncio
     async def test_writes_proposal_file(self, tmp_path):
         agent = MockGroomingAgent(proposal_text="# Custom Proposal\nStuff")
         await agent.propose(tmp_path)
@@ -203,7 +200,6 @@ class TestIsEpicComplete:
 
 
 class TestGroomingHook:
-    @pytest.mark.asyncio
     async def test_triggers_full_grooming_when_epic_complete(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
             (20, "3-done"),
@@ -225,7 +221,6 @@ class TestGroomingHook:
         assert mock_agent.last_epic_num is None  # full grooming
         assert "complete" in result.message.lower()
 
-    @pytest.mark.asyncio
     async def test_triggers_mid_epic_grooming_when_not_complete(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
             (20, "3-done"),
@@ -247,7 +242,6 @@ class TestGroomingHook:
         assert mock_agent.last_epic_num == 5  # mid-epic grooming
         assert "mid-epic" in result.message.lower()
 
-    @pytest.mark.asyncio
     async def test_always_nonblocking(self, tmp_path):
         hook = GroomingHook(kanban_dir=tmp_path, grooming_agent=None)
         sprint = Sprint(
@@ -258,7 +252,6 @@ class TestGroomingHook:
         result = await hook.evaluate(ctx)
         assert result.blocking is False
 
-    @pytest.mark.asyncio
     async def test_skips_when_no_agent_configured(self, tmp_path):
         hook = GroomingHook(kanban_dir=tmp_path, grooming_agent=None)
         sprint = Sprint(
@@ -293,7 +286,6 @@ class TestParseEpicNumber:
 
 
 class TestPostCompletionHookFires:
-    @pytest.mark.asyncio
     async def test_post_completion_hook_fires_after_success(self):
         backend = InMemoryAdapter(project_name="test")
         epic = await backend.create_epic("Test Epic", "desc")

@@ -159,7 +159,6 @@ class TestScanBoard:
 
 
 class TestHandlers:
-    @pytest.mark.asyncio
     async def test_get_board_status(self, populated_board):
         result = await handlers.get_board_status_handler({}, populated_board)
         text = result["content"][0]["text"]
@@ -169,7 +168,6 @@ class TestHandlers:
         assert "1" in data["epics"]
         assert data["next_sprint"] == 6
 
-    @pytest.mark.asyncio
     async def test_get_board_epic(self, populated_board):
         result = await handlers.get_board_epic_handler({"epic_number": "1"}, populated_board)
         import json
@@ -177,12 +175,10 @@ class TestHandlers:
         assert data["epic"]["title"] == "First Epic"
         assert len(data["sprints"]) == 2
 
-    @pytest.mark.asyncio
     async def test_get_board_epic_not_found(self, populated_board):
         result = await handlers.get_board_epic_handler({"epic_number": "99"}, populated_board)
         assert "not found" in result["content"][0]["text"]
 
-    @pytest.mark.asyncio
     async def test_get_board_sprint(self, populated_board):
         result = await handlers.get_board_sprint_handler({"sprint_number": "1"}, populated_board)
         import json
@@ -190,19 +186,16 @@ class TestHandlers:
         assert data["sprint"]["title"] == "Step Models"
         assert "Goal" in data["spec"]
 
-    @pytest.mark.asyncio
     async def test_get_board_sprint_not_found(self, populated_board):
         result = await handlers.get_board_sprint_handler({"sprint_number": "99"}, populated_board)
         assert "not found" in result["content"][0]["text"]
 
-    @pytest.mark.asyncio
     async def test_list_board_sprints_all(self, populated_board):
         result = await handlers.list_board_sprints_handler({}, populated_board)
         import json
         data = json.loads(result["content"][0]["text"])
         assert len(data) == 5
 
-    @pytest.mark.asyncio
     async def test_list_board_sprints_by_status(self, populated_board):
         result = await handlers.list_board_sprints_handler({"status": "todo"}, populated_board)
         import json
@@ -210,7 +203,6 @@ class TestHandlers:
         assert len(data) == 2
         assert all(s["status"] == "todo" for s in data)
 
-    @pytest.mark.asyncio
     async def test_list_board_sprints_by_epic(self, populated_board):
         result = await handlers.list_board_sprints_handler({"epic_number": "2"}, populated_board)
         import json

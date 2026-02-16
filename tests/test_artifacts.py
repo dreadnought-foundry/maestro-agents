@@ -242,7 +242,6 @@ class TestFileWriting:
 # ---------------------------------------------------------------------------
 
 class TestRunnerIntegration:
-    @pytest.mark.asyncio
     async def test_runner_generates_artifacts_on_success(self, tmp_path):
         from src.adapters.memory import InMemoryAdapter
         from src.agents.execution.mocks import MockProductEngineerAgent
@@ -278,7 +277,6 @@ class TestRunnerIntegration:
         assert (kanban_dir / "deferred.md").exists()
         assert (kanban_dir / "postmortem.md").exists()
 
-    @pytest.mark.asyncio
     async def test_runner_generates_artifacts_on_failure(self, tmp_path):
         from src.adapters.memory import InMemoryAdapter
         from src.agents.execution.mocks import MockProductEngineerAgent

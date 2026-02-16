@@ -62,7 +62,6 @@ class TestMockProductEngineerAgent:
         agent = MockProductEngineerAgent()
         assert isinstance(agent, ExecutionAgent)
 
-    @pytest.mark.asyncio
     async def test_returns_default_success_result(self) -> None:
         agent = MockProductEngineerAgent()
         ctx = _make_context()
@@ -71,7 +70,6 @@ class TestMockProductEngineerAgent:
         assert result.output == "Mock implementation complete"
         assert "mock_file.py" in result.files_created
 
-    @pytest.mark.asyncio
     async def test_returns_custom_result(self) -> None:
         custom = AgentResult(success=False, output="custom failure")
         agent = MockProductEngineerAgent(result=custom)
@@ -80,7 +78,6 @@ class TestMockProductEngineerAgent:
         assert result.success is False
         assert result.output == "custom failure"
 
-    @pytest.mark.asyncio
     async def test_tracks_call_count(self) -> None:
         agent = MockProductEngineerAgent()
         ctx = _make_context()
@@ -90,7 +87,6 @@ class TestMockProductEngineerAgent:
         await agent.execute(ctx)
         assert agent.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_captures_last_context(self) -> None:
         agent = MockProductEngineerAgent()
         assert agent.last_context is None
@@ -171,7 +167,6 @@ class TestProductEngineerAgent:
         prompt = agent._build_prompt(ctx)
         assert "deliverable" not in prompt.lower()
 
-    @pytest.mark.asyncio
     async def test_execute_returns_failure_when_sdk_unavailable(self) -> None:
         agent = ProductEngineerAgent()
         ctx = _make_context()

@@ -56,7 +56,6 @@ def _parse_result(result: dict) -> Any:
 
 
 class TestGetProjectStatus:
-    @pytest.mark.asyncio
     async def test_empty_project(self, backend):
         result = await get_project_status_handler({}, backend)
         data = _parse_result(result)
@@ -65,7 +64,6 @@ class TestGetProjectStatus:
         assert data["total_sprints"] == 0
         assert data["progress_pct"] == 0.0
 
-    @pytest.mark.asyncio
     async def test_with_data(self, seeded_backend):
         result = await get_project_status_handler({}, seeded_backend)
         data = _parse_result(result)
@@ -78,13 +76,11 @@ class TestGetProjectStatus:
 
 
 class TestListEpics:
-    @pytest.mark.asyncio
     async def test_empty(self, backend):
         result = await list_epics_handler({}, backend)
         data = _parse_result(result)
         assert data == []
 
-    @pytest.mark.asyncio
     async def test_with_epics(self, seeded_backend):
         result = await list_epics_handler({}, seeded_backend)
         data = _parse_result(result)
@@ -96,14 +92,12 @@ class TestListEpics:
 
 
 class TestGetEpic:
-    @pytest.mark.asyncio
     async def test_existing(self, seeded_backend):
         result = await get_epic_handler({"epic_id": "e-1"}, seeded_backend)
         data = _parse_result(result)
         assert data["title"] == "Auth System"
         assert len(data["sprint_ids"]) == 2
 
-    @pytest.mark.asyncio
     async def test_not_found(self, backend):
         result = await get_epic_handler({"epic_id": "e-999"}, backend)
         text = result["content"][0]["text"]
@@ -114,19 +108,16 @@ class TestGetEpic:
 
 
 class TestListSprints:
-    @pytest.mark.asyncio
     async def test_all_sprints(self, seeded_backend):
         result = await list_sprints_handler({}, seeded_backend)
         data = _parse_result(result)
         assert len(data) == 2
 
-    @pytest.mark.asyncio
     async def test_filter_by_epic(self, seeded_backend):
         result = await list_sprints_handler({"epic_id": "e-1"}, seeded_backend)
         data = _parse_result(result)
         assert len(data) == 2
 
-    @pytest.mark.asyncio
     async def test_filter_no_match(self, seeded_backend):
         result = await list_sprints_handler({"epic_id": "e-999"}, seeded_backend)
         data = _parse_result(result)
@@ -137,14 +128,12 @@ class TestListSprints:
 
 
 class TestGetSprint:
-    @pytest.mark.asyncio
     async def test_existing(self, seeded_backend):
         result = await get_sprint_handler({"sprint_id": "s-1"}, seeded_backend)
         data = _parse_result(result)
         assert data["goal"] == "Design auth schema"
         assert len(data["deliverables"]) == 1
 
-    @pytest.mark.asyncio
     async def test_not_found(self, backend):
         result = await get_sprint_handler({"sprint_id": "s-999"}, backend)
         text = result["content"][0]["text"]
@@ -155,7 +144,6 @@ class TestGetSprint:
 
 
 class TestCreateEpic:
-    @pytest.mark.asyncio
     async def test_create(self, backend):
         result = await create_epic_handler(
             {"title": "Marketing", "description": "Launch campaign"},
@@ -174,7 +162,6 @@ class TestCreateEpic:
 
 
 class TestCreateSprint:
-    @pytest.mark.asyncio
     async def test_create_with_json_strings(self, seeded_backend):
         result = await create_sprint_handler(
             {
@@ -190,7 +177,6 @@ class TestCreateSprint:
         assert data["created"]["goal"] == "Add OAuth"
         assert data["created"]["dependencies"] == ["s-2"]
 
-    @pytest.mark.asyncio
     async def test_create_minimal(self, seeded_backend):
         result = await create_sprint_handler(
             {"epic_id": "e-1", "goal": "Quick fix"},
@@ -200,7 +186,6 @@ class TestCreateSprint:
         assert data["created"]["goal"] == "Quick fix"
         assert data["created"]["tasks"] == []
 
-    @pytest.mark.asyncio
     async def test_create_invalid_epic(self, backend):
         result = await create_sprint_handler(
             {"epic_id": "e-999", "goal": "Orphan sprint"},
@@ -209,7 +194,6 @@ class TestCreateSprint:
         text = result["content"][0]["text"]
         assert "Error" in text
 
-    @pytest.mark.asyncio
     async def test_create_with_plain_text_tasks(self, seeded_backend):
         """If tasks is a plain string (not JSON), wrap it as a single task."""
         result = await create_sprint_handler(

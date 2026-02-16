@@ -55,7 +55,6 @@ def generator(sample_sprint, sample_result):
 # ---------------------------------------------------------------------------
 
 class TestMockSynthesizer:
-    @pytest.mark.asyncio
     async def test_passthrough_unchanged(self, tmp_path):
         path = tmp_path / "deferred.md"
         path.write_text("# Deferred Items\n\n- [ ] Item A\n")
@@ -63,7 +62,6 @@ class TestMockSynthesizer:
         result = await mock.synthesize_deferred(path)
         assert result == "# Deferred Items\n\n- [ ] Item A\n"
 
-    @pytest.mark.asyncio
     async def test_tracks_call_count(self, tmp_path):
         path = tmp_path / "postmortem.md"
         path.write_text("# Postmortems\n")
@@ -72,7 +70,6 @@ class TestMockSynthesizer:
         await mock.synthesize_postmortem(path)
         assert mock.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_custom_transform(self, tmp_path):
         path = tmp_path / "deferred.md"
         path.write_text("# Deferred Items\n\n- [ ] Item A\n- [ ] Item A\n")
@@ -87,7 +84,6 @@ class TestMockSynthesizer:
 # ---------------------------------------------------------------------------
 
 class TestAppendAndSynthesize:
-    @pytest.mark.asyncio
     async def test_deferred_calls_synthesizer(self, generator, tmp_path):
         mock = MockSynthesizer()
         await generator.append_and_synthesize_deferred(tmp_path, synthesizer=mock)
@@ -95,14 +91,12 @@ class TestAppendAndSynthesize:
         content = (tmp_path / "deferred.md").read_text()
         assert "Widget API redesign" in content
 
-    @pytest.mark.asyncio
     async def test_deferred_skips_when_no_synthesizer(self, generator, tmp_path):
         path = await generator.append_and_synthesize_deferred(tmp_path, synthesizer=None)
         assert path.exists()
         content = path.read_text()
         assert "Widget API redesign" in content
 
-    @pytest.mark.asyncio
     async def test_postmortem_calls_synthesizer(self, generator, tmp_path):
         mock = MockSynthesizer()
         await generator.append_and_synthesize_postmortem(tmp_path, synthesizer=mock)
@@ -110,7 +104,6 @@ class TestAppendAndSynthesize:
         content = (tmp_path / "postmortem.md").read_text()
         assert "s-26" in content
 
-    @pytest.mark.asyncio
     async def test_postmortem_skips_when_no_synthesizer(self, generator, tmp_path):
         path = await generator.append_and_synthesize_postmortem(tmp_path, synthesizer=None)
         assert path.exists()
@@ -123,7 +116,6 @@ class TestAppendAndSynthesize:
 # ---------------------------------------------------------------------------
 
 class TestRunnerSynthesizerIntegration:
-    @pytest.mark.asyncio
     async def test_runner_calls_synthesizer(self, tmp_path):
         from src.adapters.memory import InMemoryAdapter
         from src.agents.execution.mocks import MockProductEngineerAgent
@@ -151,7 +143,6 @@ class TestRunnerSynthesizerIntegration:
         # Synthesizer should be called twice: once for deferred, once for postmortem
         assert mock_synth.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_runner_without_synthesizer_no_regression(self, tmp_path):
         from src.adapters.memory import InMemoryAdapter
         from src.agents.execution.mocks import MockProductEngineerAgent
@@ -183,7 +174,6 @@ class TestRunnerSynthesizerIntegration:
 # ---------------------------------------------------------------------------
 
 class TestSynthesizerEdgeCases:
-    @pytest.mark.asyncio
     async def test_empty_file(self, tmp_path):
         path = tmp_path / "deferred.md"
         path.write_text("")

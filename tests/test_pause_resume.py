@@ -74,7 +74,6 @@ class TestRunConfig:
 # ---------------------------------------------------------------------------
 
 class TestFindResumePoint:
-    @pytest.mark.asyncio
     async def test_finds_first_incomplete_step(self):
         """Sprint with first step DONE, second TODO -> returns 1."""
         backend, sprint_id = await _setup_sprint(
@@ -91,7 +90,6 @@ class TestFindResumePoint:
         idx = await find_resume_point(sprint_id, backend)
         assert idx == 1
 
-    @pytest.mark.asyncio
     async def test_all_steps_done_returns_length(self):
         """All steps DONE -> returns len(steps)."""
         backend, sprint_id = await _setup_sprint(
@@ -110,7 +108,6 @@ class TestFindResumePoint:
 # ---------------------------------------------------------------------------
 
 class TestResumeSprint:
-    @pytest.mark.asyncio
     async def test_resumes_blocked_sprint(self):
         """Block a sprint mid-execution, resume it -> completes successfully."""
         backend, sprint_id = await _setup_sprint(
@@ -132,7 +129,6 @@ class TestResumeSprint:
         sprint = await backend.get_sprint(sprint_id)
         assert sprint.status is SprintStatus.DONE
 
-    @pytest.mark.asyncio
     async def test_resume_non_blocked_raises(self):
         """Try to resume a TODO sprint -> ValueError."""
         backend, sprint_id = await _setup_sprint()
@@ -142,7 +138,6 @@ class TestResumeSprint:
         with pytest.raises(ValueError, match="expected blocked"):
             await resume_sprint(sprint_id, backend, registry)
 
-    @pytest.mark.asyncio
     async def test_resume_skips_completed_steps(self):
         """Only executes remaining steps (mock call_count matches)."""
         backend, sprint_id = await _setup_sprint(
@@ -169,7 +164,6 @@ class TestResumeSprint:
 # ---------------------------------------------------------------------------
 
 class TestCancelSprint:
-    @pytest.mark.asyncio
     async def test_cancel_in_progress(self):
         """Cancels an IN_PROGRESS sprint by blocking with reason."""
         backend, sprint_id = await _setup_sprint()
@@ -180,7 +174,6 @@ class TestCancelSprint:
         sprint = await backend.get_sprint(sprint_id)
         assert sprint.status is SprintStatus.BLOCKED
 
-    @pytest.mark.asyncio
     async def test_cancel_todo(self):
         """Cancels a TODO sprint by setting ABANDONED."""
         backend, sprint_id = await _setup_sprint()
@@ -196,7 +189,6 @@ class TestCancelSprint:
 # ---------------------------------------------------------------------------
 
 class TestRetryStep:
-    @pytest.mark.asyncio
     async def test_retry_succeeds_on_second_attempt(self):
         """Agent fails first, succeeds second -> returns success."""
         backend, sprint_id = await _setup_sprint(tasks=[{"name": "implement"}])
@@ -212,7 +204,6 @@ class TestRetryStep:
         assert result.success is True
         assert "attempt 2" in result.output.lower()
 
-    @pytest.mark.asyncio
     async def test_retry_exhausts_max_retries(self):
         """Agent always fails -> returns failure after max_retries+1 attempts."""
         backend, sprint_id = await _setup_sprint(tasks=[{"name": "implement"}])

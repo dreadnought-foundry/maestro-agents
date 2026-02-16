@@ -22,7 +22,6 @@ assign_task = custom_tools_module.assign_task_handler
 get_team_members = custom_tools_module.get_team_members_handler
 
 
-@pytest.mark.asyncio
 async def test_get_team_members_returns_list():
     """Test that get_team_members returns expected team members."""
     result = await get_team_members({})
@@ -42,7 +41,6 @@ async def test_get_team_members_returns_list():
     assert "devops" in text
 
 
-@pytest.mark.asyncio
 async def test_get_team_members_structure():
     """Test that get_team_members returns proper structure."""
     result = await get_team_members({})
@@ -55,7 +53,6 @@ async def test_get_team_members_structure():
     assert isinstance(result["content"][0]["text"], str)
 
 
-@pytest.mark.asyncio
 async def test_assign_task_with_all_parameters():
     """Test assign_task with member, task, and priority."""
     args = {
@@ -77,7 +74,6 @@ async def test_assign_task_with_all_parameters():
     assert "Assigned" in text
 
 
-@pytest.mark.asyncio
 async def test_assign_task_default_priority():
     """Test assign_task uses 'medium' as default priority."""
     args = {
@@ -92,7 +88,6 @@ async def test_assign_task_default_priority():
     assert "medium" in text
 
 
-@pytest.mark.asyncio
 async def test_assign_task_various_priorities():
     """Test assign_task with different priority levels."""
     priorities = ["low", "medium", "high", "critical"]
@@ -108,7 +103,6 @@ async def test_assign_task_various_priorities():
         assert priority in text
 
 
-@pytest.mark.asyncio
 async def test_assign_task_return_structure():
     """Test assign_task returns proper structure."""
     args = {
@@ -125,7 +119,6 @@ async def test_assign_task_return_structure():
     assert isinstance(result["content"][0]["text"], str)
 
 
-@pytest.mark.asyncio
 async def test_assign_task_with_special_characters():
     """Test assign_task handles special characters in task description."""
     args = {
@@ -140,7 +133,6 @@ async def test_assign_task_with_special_characters():
     assert "/users/{id}" in text or "API endpoint" in text
 
 
-@pytest.mark.asyncio
 async def test_get_team_members_with_empty_args():
     """Test get_team_members works with empty arguments dictionary."""
     result = await get_team_members({})

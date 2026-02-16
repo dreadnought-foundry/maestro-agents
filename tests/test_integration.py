@@ -99,7 +99,6 @@ class TestMCPServerFactory:
 class TestFullPipeline:
     """End-to-end flow: handler → adapter → verify state."""
 
-    @pytest.mark.asyncio
     async def test_create_epic_then_sprints_then_status(self):
         backend = InMemoryAdapter(project_name="pipeline-test")
 
@@ -136,7 +135,6 @@ class TestFullPipeline:
         assert status["sprints_done"] == 1
         assert status["progress_pct"] == pytest.approx(33.3, abs=0.1)
 
-    @pytest.mark.asyncio
     async def test_multiple_epics_with_cross_references(self):
         """Sprints in different epics can reference each other via dependencies."""
         backend = InMemoryAdapter()

@@ -157,7 +157,6 @@ async def _setup_with_kanban(tmp_path):
 
 
 class TestRunnerCumulativeContext:
-    @pytest.mark.asyncio
     async def test_runner_filters_context_from_kanban_dir(self, tmp_path):
         """When kanban_dir is set, agents receive filtered cumulative context."""
         backend, sprint_id, kanban_dir = await _setup_with_kanban(tmp_path)
@@ -181,7 +180,6 @@ class TestRunnerCumulativeContext:
         assert len(agent.last_context.cumulative_deferred) < len(SAMPLE_DEFERRED) or \
             agent.last_context.cumulative_deferred == SAMPLE_DEFERRED  # small sample may not shrink
 
-    @pytest.mark.asyncio
     async def test_runner_without_kanban_dir_leaves_context_none(self, tmp_path):
         """When kanban_dir is not set, cumulative fields are None."""
         backend = InMemoryAdapter()
@@ -202,7 +200,6 @@ class TestRunnerCumulativeContext:
         assert agent.last_context.cumulative_deferred is None
         assert agent.last_context.cumulative_postmortem is None
 
-    @pytest.mark.asyncio
     async def test_test_step_gets_no_cumulative_context(self, tmp_path):
         """Test steps should not receive cumulative context (they just run pytest)."""
         backend = InMemoryAdapter()
@@ -233,7 +230,6 @@ class TestRunnerCumulativeContext:
         assert agent.last_context.cumulative_deferred is None
         assert agent.last_context.cumulative_postmortem is None
 
-    @pytest.mark.asyncio
     async def test_runner_missing_files_leaves_context_none(self, tmp_path):
         """When kanban_dir exists but files don't, cumulative fields are None."""
         backend = InMemoryAdapter()
@@ -258,7 +254,6 @@ class TestRunnerCumulativeContext:
         assert agent.last_context.cumulative_deferred is None
         assert agent.last_context.cumulative_postmortem is None
 
-    @pytest.mark.asyncio
     async def test_runner_empty_files_leaves_context_none(self, tmp_path):
         """When kanban files exist but are empty, cumulative fields are None."""
         backend = InMemoryAdapter()

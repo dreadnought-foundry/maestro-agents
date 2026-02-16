@@ -19,8 +19,11 @@ from src.execution.dependencies import validate_sprint_dependencies
 from src.execution.gates import CoverageGate
 from src.execution.hooks import HookContext, HookPoint, HookRegistry
 from src.execution.resume import cancel_sprint, resume_sprint
+from src.execution.config import RunConfig
 from src.execution.runner import RunResult, SprintRunner
 from src.workflow.exceptions import DependencyNotMetError
+
+_TEST_CONFIG = RunConfig(max_retries=2, retry_delay_seconds=0.0)
 from src.workflow.models import SprintStatus
 
 
@@ -52,14 +55,13 @@ async def _setup_sprint(backend, tasks=None, dependencies=None):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_full_lifecycle_create_to_completion():
     """Create epic -> create sprint with tasks -> run -> verify DONE, all steps completed."""
     backend = InMemoryAdapter(project_name="e2e-project")
     epic, sprint = await _setup_sprint(backend)
     registry = create_default_registry()
 
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result = await runner.run(sprint.id)
 
     assert result.success is True
@@ -72,7 +74,6 @@ async def test_full_lifecycle_create_to_completion():
     assert updated_sprint.status is SprintStatus.DONE
 
 
-@pytest.mark.asyncio
 async def test_full_lifecycle_with_multiple_step_types():
     """Sprint with implement/test/review tasks; each agent type is called."""
     backend = InMemoryAdapter()
@@ -94,7 +95,7 @@ async def test_full_lifecycle_with_multiple_step_types():
     registry.register("test", test_agent)
     registry.register("review", review_agent)
 
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result = await runner.run(sprint.id)
 
     assert result.success is True
@@ -103,7 +104,6 @@ async def test_full_lifecycle_with_multiple_step_types():
     assert review_agent.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_dependency_enforcement():
     """Sprint B depends on A. B fails before A is done; succeeds after."""
     backend = InMemoryAdapter()
@@ -121,7 +121,7 @@ async def test_dependency_enforcement():
 
     # Complete sprint A
     registry = create_default_registry()
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result_a = await runner.run(sprint_a.id)
     assert result_a.success is True
 
@@ -132,7 +132,6 @@ async def test_dependency_enforcement():
     assert result_b.success is True
 
 
-@pytest.mark.asyncio
 async def test_coverage_gate_blocks_low_coverage():
     """CoverageGate blocks when coverage is below threshold."""
     gate = CoverageGate(threshold=80.0)
@@ -155,7 +154,6 @@ async def test_coverage_gate_blocks_low_coverage():
     assert "50.0%" in hook_result.message
 
 
-@pytest.mark.asyncio
 async def test_resume_after_failure():
     """Run sprint, agent fails on step 2, sprint blocked. Resume -> completes from step 2."""
     backend = InMemoryAdapter()
@@ -174,7 +172,7 @@ async def test_resume_after_failure():
     registry.register("test", fail_test_agent)
     registry.register("review", MockQualityEngineerAgent())
 
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result = await runner.run(sprint.id)
 
     assert result.success is False
@@ -195,7 +193,6 @@ async def test_resume_after_failure():
     assert result2.steps_completed == 3
 
 
-@pytest.mark.asyncio
 async def test_cancel_in_progress_sprint():
     """Start a sprint manually, cancel it -> BLOCKED with reason."""
     backend = InMemoryAdapter()
@@ -209,7 +206,6 @@ async def test_cancel_in_progress_sprint():
     assert updated.status is SprintStatus.BLOCKED
 
 
-@pytest.mark.asyncio
 async def test_deferred_items_flow_through():
     """Agent returns deferred_items -> RunResult.deferred_items includes them."""
     backend = InMemoryAdapter()
@@ -228,7 +224,7 @@ async def test_deferred_items_flow_through():
     registry = AgentRegistry()
     registry.register("implement", agent)
 
-    runner = SprintRunner(backend=backend, agent_registry=registry)
+    runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result = await runner.run(sprint.id)
 
     assert result.success is True
@@ -236,7 +232,6 @@ async def test_deferred_items_flow_through():
     assert "TODO: add logging" in result.deferred_items
 
 
-@pytest.mark.asyncio
 async def test_create_default_registry_has_common_types():
     """create_default_registry has implement, test, review agents."""
     registry = create_default_registry()
@@ -250,7 +245,6 @@ async def test_create_default_registry_has_common_types():
     assert "quality_review" in agents
 
 
-@pytest.mark.asyncio
 async def test_run_sprint_convenience_function():
     """run_sprint() with defaults works end-to-end."""
     backend = InMemoryAdapter()

@@ -92,7 +92,6 @@ class TestMockHook:
         hook = MockHook(hook_point=HookPoint.PRE_SPRINT)
         assert isinstance(hook, Hook)
 
-    @pytest.mark.asyncio
     async def test_returns_configured_result(self, sample_sprint):
         custom_result = HookResult(passed=False, message="blocked")
         hook = MockHook(hook_point=HookPoint.POST_STEP, result=custom_result)
@@ -131,7 +130,6 @@ class TestHookRegistry:
         assert hook1 in hooks
         assert hook2 in hooks
 
-    @pytest.mark.asyncio
     async def test_evaluate_all_passes(self, sample_sprint):
         registry = HookRegistry()
         registry.register(MockHook(hook_point=HookPoint.PRE_SPRINT))
@@ -143,7 +141,6 @@ class TestHookRegistry:
         assert len(results) == 2
         assert all(r.passed for r in results)
 
-    @pytest.mark.asyncio
     async def test_evaluate_all_mixed(self, sample_sprint):
         registry = HookRegistry()
         registry.register(MockHook(hook_point=HookPoint.POST_STEP))
@@ -161,7 +158,6 @@ class TestHookRegistry:
         assert results[0].passed is True
         assert results[1].passed is False
 
-    @pytest.mark.asyncio
     async def test_evaluate_all_collects_deferred_items(self, sample_sprint):
         registry = HookRegistry()
         registry.register(

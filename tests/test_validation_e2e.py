@@ -48,7 +48,6 @@ def _registry_for_types(mapping: dict) -> AgentRegistry:
 # 1. Multi-type sprint (implement -> test -> review) — all succeed
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_multi_type_sprint_with_hooks_all_succeed():
     """implement -> test -> review sprint completes through the integrated runner
     with hooks when all agents return successful results."""
@@ -90,7 +89,6 @@ async def test_multi_type_sprint_with_hooks_all_succeed():
 # 2. Coverage gate blocks low-coverage sprint
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_coverage_gate_blocks_low_coverage():
     """POST_STEP CoverageGate blocks the sprint when the test agent reports
     coverage below the threshold (50% < 80%)."""
@@ -132,7 +130,6 @@ async def test_coverage_gate_blocks_low_coverage():
 # 3. Quality review gate blocks unapproved sprint
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_quality_review_gate_blocks_unapproved():
     """PRE_COMPLETION QualityReviewGate blocks the sprint when no review agent
     has produced an 'approve' verdict."""
@@ -169,7 +166,6 @@ async def test_quality_review_gate_blocks_unapproved():
 # 4. Sprint with 10+ steps completes correctly
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_large_sprint_with_many_steps():
     """A sprint with 12 steps completes successfully, executing all agents."""
     tasks = [{"name": "implement"} for _ in range(12)]
@@ -192,7 +188,6 @@ async def test_large_sprint_with_many_steps():
 # 5. Empty sprint (no tasks) completes immediately
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_empty_sprint_completes_immediately():
     """A sprint with no tasks completes immediately with zero steps."""
     backend, sprint_id = await _create_sprint(tasks=[])
@@ -215,7 +210,6 @@ async def test_empty_sprint_completes_immediately():
 # 6. All deferred items from agents collected across mixed agent types
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_deferred_items_collected_across_mixed_agents():
     """Deferred items from implement, test, and review agents are all collected
     in the final RunResult."""
@@ -269,7 +263,6 @@ async def test_deferred_items_collected_across_mixed_agents():
 # 7. create_default_registry agents handle all standard step types
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_default_registry_handles_all_standard_step_types():
     """create_default_registry() registers agents for implement, write_code,
     test, run_tests, review, and quality_review step types."""
@@ -296,7 +289,6 @@ async def test_default_registry_handles_all_standard_step_types():
 # 8. Previous outputs accumulate correctly across steps
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_previous_outputs_accumulate_across_steps():
     """Each successive step receives a growing list of previous_outputs from
     earlier steps."""
@@ -340,7 +332,6 @@ async def test_previous_outputs_accumulate_across_steps():
 # 9. Full lifecycle: create epic -> create sprint -> run -> verify DONE
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_full_lifecycle_epic_to_done():
     """End-to-end lifecycle: create epic, create sprint, run through runner,
     and verify the sprint ends in DONE status with correct transitions."""
@@ -406,7 +397,6 @@ async def test_full_lifecycle_epic_to_done():
 # 10. Runner with all hooks from create_default_hooks — happy path
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_runner_with_all_default_hooks_happy_path():
     """Runner with the full set of default hooks (CoverageGate, QualityReviewGate,
     StepOrderingGate, RequiredStepsGate) passes the happy path when the test agent

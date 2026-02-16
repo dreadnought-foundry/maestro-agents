@@ -26,7 +26,7 @@ async def _setup_single_step(tasks=None):
     return backend, sprint.id
 
 
-def _make_runner(backend, registry=None, mock_agent=None):
+def _make_runner(backend, registry=None, mock_agent=None, config=None):
     """Create a SprintRunner with a registry that has a default mock agent."""
     if registry is None:
         registry = AgentRegistry()
@@ -34,14 +34,15 @@ def _make_runner(backend, registry=None, mock_agent=None):
         # Register for common step names
         for name in ("implement", "test", "review", "write_code", "run_tests"):
             registry.register(name, mock_agent)
-    return SprintRunner(backend=backend, agent_registry=registry)
+    if config is None:
+        config = RunConfig(max_retries=2, retry_delay_seconds=0.0)
+    return SprintRunner(backend=backend, agent_registry=registry, config=config)
 
 
 # ---------------------------------------------------------------------------
 # Happy path (4 tests)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_run_single_step_sprint():
     """Single-task sprint completes successfully with 1 step."""
     backend, sprint_id = await _setup_single_step(tasks=[{"name": "implement"}])
@@ -56,7 +57,6 @@ async def test_run_single_step_sprint():
     assert mock.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_run_multi_step_sprint():
     """Sprint with 3 tasks completes all steps and collects all agent results."""
     tasks = [{"name": "implement"}, {"name": "test"}, {"name": "review"}]
@@ -72,7 +72,6 @@ async def test_run_multi_step_sprint():
     assert len(result.agent_results) == 3
 
 
-@pytest.mark.asyncio
 async def test_run_result_has_duration():
     """RunResult duration_seconds is a positive number."""
     backend, sprint_id = await _setup_single_step()
@@ -83,7 +82,6 @@ async def test_run_result_has_duration():
     assert result.duration_seconds > 0
 
 
-@pytest.mark.asyncio
 async def test_run_returns_run_result():
     """RunResult has all expected fields populated correctly."""
     backend, sprint_id = await _setup_single_step()
@@ -103,7 +101,6 @@ async def test_run_returns_run_result():
 # Agent dispatch (2 tests)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_correct_agent_called():
     """Different step types dispatch to different registered agents."""
     tasks = [{"name": "write_code"}, {"name": "run_tests"}]
@@ -123,7 +120,6 @@ async def test_correct_agent_called():
     assert test_agent.call_count == 1
 
 
-@pytest.mark.asyncio
 async def test_context_includes_previous_outputs():
     """Second step's StepContext includes the first step's AgentResult."""
     tasks = [{"name": "implement"}, {"name": "test"}]
@@ -150,7 +146,6 @@ async def test_context_includes_previous_outputs():
 # Progress callbacks (2 tests)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_progress_callback_called():
     """on_progress is called once per step."""
     tasks = [{"name": "implement"}, {"name": "test"}]
@@ -163,7 +158,6 @@ async def test_progress_callback_called():
     assert len(progress_log) == 2
 
 
-@pytest.mark.asyncio
 async def test_progress_callback_has_step_info():
     """Progress callback receives a dict with step status information."""
     backend, sprint_id = await _setup_single_step(tasks=[{"name": "implement"}])
@@ -184,7 +178,6 @@ async def test_progress_callback_has_step_info():
 # Failure handling (2 tests)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_agent_failure_blocks_sprint():
     """When an agent returns success=False, the sprint is blocked and RunResult reflects failure."""
     backend, sprint_id = await _setup_single_step()
@@ -200,7 +193,6 @@ async def test_agent_failure_blocks_sprint():
     assert sprint.status is SprintStatus.BLOCKED
 
 
-@pytest.mark.asyncio
 async def test_agent_failure_stops_execution():
     """After a step fails, remaining steps are not executed."""
     tasks = [{"name": "implement"}, {"name": "test"}]
@@ -231,7 +223,6 @@ async def test_agent_failure_stops_execution():
 # Deferred items (2 tests)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.asyncio
 async def test_deferred_items_aggregated():
     """Deferred items from multiple agents are collected in RunResult."""
     tasks = [{"name": "implement"}, {"name": "test"}]
@@ -254,7 +245,6 @@ async def test_deferred_items_aggregated():
     assert result.deferred_items == ["TODO-1", "TODO-2", "TODO-3"]
 
 
-@pytest.mark.asyncio
 async def test_empty_deferred_items():
     """When no agent returns deferred items, the list is empty."""
     backend, sprint_id = await _setup_single_step()

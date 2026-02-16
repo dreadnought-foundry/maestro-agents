@@ -57,7 +57,8 @@ def sample_context(tmp_path):
 
 
 class TestClaudeCodeExecutor:
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_simple_prompt(self, executor, working_dir):
         """Run a real prompt through the SDK and verify we get output."""
         result = await executor.run(
@@ -68,7 +69,8 @@ class TestClaudeCodeExecutor:
         assert result.success is True
         assert "HELLO_TEST_PASS" in result.output
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_returns_agent_result(self, executor, working_dir):
         """Verify the return type is a proper AgentResult."""
         result = await executor.run(
@@ -81,7 +83,8 @@ class TestClaudeCodeExecutor:
         assert isinstance(result.files_created, list)
         assert isinstance(result.files_modified, list)
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_file_write_tracked(self, executor, working_dir):
         """Ask the SDK to write a file and verify it's tracked."""
         result = await executor.run(
@@ -94,7 +97,6 @@ class TestClaudeCodeExecutor:
         assert (working_dir / "hello.txt").exists()
         assert any("hello.txt" in f for f in result.files_created)
 
-    @pytest.mark.asyncio
     async def test_timeout_handling(self, executor, working_dir):
         """Timeout produces a failed AgentResult."""
         # This is the one test where we mock — can't reliably force a real timeout
@@ -109,7 +111,8 @@ class TestClaudeCodeExecutor:
         assert result.success is False
         assert "timed out" in result.output
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_no_output_gives_placeholder(self, executor, working_dir):
         """If the SDK returns empty text, we get a placeholder."""
         result = await executor.run(
@@ -127,7 +130,6 @@ class TestClaudeCodeExecutor:
 
 
 class TestProductEngineerAgent:
-    @pytest.mark.asyncio
     async def test_no_executor_fails_gracefully(self, sample_context):
         """Without an executor, agent returns a failed result (not a crash)."""
         agent = ProductEngineerAgent()
@@ -135,7 +137,8 @@ class TestProductEngineerAgent:
         assert result.success is False
         assert "No ClaudeCodeExecutor" in result.output
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_executes_with_real_sdk(self, sample_context):
         """Run the real agent through the real SDK."""
         executor = ClaudeCodeExecutor(model="sonnet", max_turns=2)
@@ -148,14 +151,14 @@ class TestProductEngineerAgent:
 
 
 class TestTestRunnerAgent:
-    @pytest.mark.asyncio
     async def test_no_executor_fails_gracefully(self, sample_context):
         agent = TestRunnerAgent()
         result = await agent.execute(sample_context)
         assert result.success is False
         assert "No ClaudeCodeExecutor" in result.output
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_executes_with_real_sdk(self, sample_context):
         """Run the real test runner agent through the SDK."""
         executor = ClaudeCodeExecutor(model="sonnet", max_turns=2)
@@ -168,14 +171,14 @@ class TestTestRunnerAgent:
 
 
 class TestQualityEngineerAgent:
-    @pytest.mark.asyncio
     async def test_no_executor_fails_gracefully(self, sample_context):
         agent = QualityEngineerAgent()
         result = await agent.execute(sample_context)
         assert result.success is False
         assert "No ClaudeCodeExecutor" in result.output
 
-    @pytest.mark.asyncio
+    @pytest.mark.slow
+    @pytest.mark.timeout(120)
     async def test_executes_with_real_sdk(self, sample_context):
         """Run the real quality engineer agent through the SDK."""
         executor = ClaudeCodeExecutor(model="sonnet", max_turns=2)
@@ -191,7 +194,6 @@ class TestQualityEngineerAgent:
 
 
 class TestMockAgentsUnchanged:
-    @pytest.mark.asyncio
     async def test_mock_product_engineer(self, sample_context):
         from src.agents.execution.mocks import MockProductEngineerAgent
 
@@ -200,7 +202,6 @@ class TestMockAgentsUnchanged:
         assert result.success is True
         assert agent.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_mock_test_runner(self, sample_context):
         from src.agents.execution.mocks import MockTestRunnerAgent
 
@@ -209,7 +210,6 @@ class TestMockAgentsUnchanged:
         assert result.success is True
         assert result.test_results["total"] == 10
 
-    @pytest.mark.asyncio
     async def test_mock_quality_engineer(self, sample_context):
         from src.agents.execution.mocks import MockQualityEngineerAgent
 

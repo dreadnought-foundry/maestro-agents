@@ -53,7 +53,6 @@ def _agent_result(
 
 
 class TestCoverageGate:
-    @pytest.mark.asyncio
     async def test_passes_above_threshold(self) -> None:
         gate = CoverageGate(threshold=80.0)
         ctx = HookContext(
@@ -64,7 +63,6 @@ class TestCoverageGate:
         assert result.passed is True
         assert "90" in result.message
 
-    @pytest.mark.asyncio
     async def test_fails_below_threshold(self) -> None:
         gate = CoverageGate(threshold=80.0)
         ctx = HookContext(
@@ -76,7 +74,6 @@ class TestCoverageGate:
         assert result.blocking is True
         assert "60" in result.message
 
-    @pytest.mark.asyncio
     async def test_passes_no_coverage_data(self) -> None:
         gate = CoverageGate(threshold=80.0)
         ctx = HookContext(
@@ -86,7 +83,6 @@ class TestCoverageGate:
         result = await gate.evaluate(ctx)
         assert result.passed is True
 
-    @pytest.mark.asyncio
     async def test_passes_no_agent_result(self) -> None:
         gate = CoverageGate(threshold=80.0)
         ctx = HookContext(sprint=_sprint(), agent_result=None)
@@ -100,7 +96,6 @@ class TestCoverageGate:
 
 
 class TestQualityReviewGate:
-    @pytest.mark.asyncio
     async def test_passes_with_approval(self) -> None:
         gate = QualityReviewGate()
         ctx = HookContext(
@@ -113,7 +108,6 @@ class TestQualityReviewGate:
         assert result.passed is True
         assert "approved" in result.message.lower()
 
-    @pytest.mark.asyncio
     async def test_fails_with_request_changes(self) -> None:
         gate = QualityReviewGate()
         ctx = HookContext(
@@ -127,7 +121,6 @@ class TestQualityReviewGate:
         assert result.blocking is True
         assert "request_changes" in result.message
 
-    @pytest.mark.asyncio
     async def test_fails_with_no_review(self) -> None:
         gate = QualityReviewGate()
         ctx = HookContext(
@@ -145,7 +138,6 @@ class TestQualityReviewGate:
 
 
 class TestStepOrderingGate:
-    @pytest.mark.asyncio
     async def test_passes_first_step(self) -> None:
         step1 = _step("s1", "First", StepStatus.TODO)
         sprint = _sprint(steps=[step1, _step("s2", "Second")])
@@ -154,7 +146,6 @@ class TestStepOrderingGate:
         result = await gate.evaluate(ctx)
         assert result.passed is True
 
-    @pytest.mark.asyncio
     async def test_passes_after_done_steps(self) -> None:
         step1 = _step("s1", "First", StepStatus.DONE)
         step2 = _step("s2", "Second", StepStatus.TODO)
@@ -164,7 +155,6 @@ class TestStepOrderingGate:
         result = await gate.evaluate(ctx)
         assert result.passed is True
 
-    @pytest.mark.asyncio
     async def test_fails_with_incomplete_preceding(self) -> None:
         step1 = _step("s1", "First", StepStatus.TODO)
         step2 = _step("s2", "Second", StepStatus.TODO)
@@ -183,7 +173,6 @@ class TestStepOrderingGate:
 
 
 class TestRequiredStepsGate:
-    @pytest.mark.asyncio
     async def test_passes_all_done(self) -> None:
         steps = [
             _step("s1", "Build", StepStatus.DONE),
@@ -194,7 +183,6 @@ class TestRequiredStepsGate:
         result = await gate.evaluate(ctx)
         assert result.passed is True
 
-    @pytest.mark.asyncio
     async def test_fails_with_missing(self) -> None:
         steps = [
             _step("s1", "Build", StepStatus.DONE),
@@ -207,7 +195,6 @@ class TestRequiredStepsGate:
         assert "Test" in result.message
         assert len(result.deferred_items) == 1
 
-    @pytest.mark.asyncio
     async def test_custom_required_list(self) -> None:
         steps = [
             _step("s1", "Build", StepStatus.DONE),

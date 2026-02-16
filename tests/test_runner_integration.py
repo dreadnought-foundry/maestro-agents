@@ -60,7 +60,6 @@ class FailNTimesAgent:
 # ---------------------------------------------------------------------------
 
 class TestRunnerDependencies:
-    @pytest.mark.asyncio
     async def test_runner_checks_dependencies_before_start(self):
         """Runner calls validate_sprint_dependencies — met deps proceed normally."""
         backend = InMemoryAdapter()
@@ -83,7 +82,6 @@ class TestRunnerDependencies:
         result = await runner.run(main.id)
         assert result.success is True
 
-    @pytest.mark.asyncio
     async def test_runner_unmet_deps_raises(self):
         """Runner with unmet dependencies raises DependencyNotMetError."""
         backend = InMemoryAdapter()
@@ -109,7 +107,6 @@ class TestRunnerDependencies:
 # ---------------------------------------------------------------------------
 
 class TestRunnerHooks:
-    @pytest.mark.asyncio
     async def test_pre_sprint_hooks_evaluated(self):
         """PRE_SPRINT hooks are evaluated before execution begins."""
         backend, sprint_id, _ = await _setup()
@@ -125,7 +122,6 @@ class TestRunnerHooks:
         await runner.run(sprint_id)
         assert hook.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_post_step_hooks_evaluated_per_step(self):
         """POST_STEP hooks are evaluated after each step."""
         backend, sprint_id, _ = await _setup(
@@ -143,7 +139,6 @@ class TestRunnerHooks:
         await runner.run(sprint_id)
         assert hook.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_blocking_hook_failure_blocks_sprint(self):
         """A blocking hook that fails should block the sprint."""
         backend, sprint_id, _ = await _setup()
@@ -164,7 +159,6 @@ class TestRunnerHooks:
         sprint = await backend.get_sprint(sprint_id)
         assert sprint.status is SprintStatus.BLOCKED
 
-    @pytest.mark.asyncio
     async def test_non_blocking_hook_failure_continues(self):
         """A non-blocking hook failure should not stop execution."""
         backend, sprint_id, _ = await _setup()
@@ -189,7 +183,6 @@ class TestRunnerHooks:
 # ---------------------------------------------------------------------------
 
 class TestRunnerPreCompletion:
-    @pytest.mark.asyncio
     async def test_pre_completion_hooks_evaluated(self):
         """PRE_COMPLETION hooks are evaluated before completing the sprint."""
         backend, sprint_id, _ = await _setup()
@@ -205,7 +198,6 @@ class TestRunnerPreCompletion:
         await runner.run(sprint_id)
         assert hook.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_pre_completion_blocking_failure_blocks(self):
         """A blocking PRE_COMPLETION hook failure should block the sprint."""
         backend, sprint_id, _ = await _setup()
@@ -230,7 +222,6 @@ class TestRunnerPreCompletion:
 # ---------------------------------------------------------------------------
 
 class TestRunnerRetry:
-    @pytest.mark.asyncio
     async def test_retry_on_agent_failure(self):
         """Runner retries failed step up to max_retries before blocking."""
         backend, sprint_id, _ = await _setup()
@@ -248,7 +239,6 @@ class TestRunnerRetry:
         assert result.success is True
         assert agent._attempts == 2  # 1 fail + 1 success
 
-    @pytest.mark.asyncio
     async def test_blocks_after_exhausting_retries(self):
         """Runner blocks sprint after exhausting all retries."""
         backend, sprint_id, _ = await _setup()
@@ -274,7 +264,6 @@ class TestRunnerRetry:
 # ---------------------------------------------------------------------------
 
 class TestRunnerRunState:
-    @pytest.mark.asyncio
     async def test_hook_context_has_agent_results(self):
         """POST_STEP hook context includes the agent result for that step."""
         backend, sprint_id, _ = await _setup()
@@ -300,7 +289,6 @@ class TestRunnerRunState:
 # ---------------------------------------------------------------------------
 
 class TestResumeTransition:
-    @pytest.mark.asyncio
     async def test_resume_uses_validate_transition(self):
         """resume_sprint uses validate_transition (not raw update_sprint)."""
         from src.execution.resume import resume_sprint

@@ -32,14 +32,12 @@ class TestDependencyNotMetError:
 
 
 class TestCheckSprintDependencies:
-    @pytest.mark.asyncio
     async def test_no_dependencies_returns_empty(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         sprint = await adapter.create_sprint(epic.id, "Sprint 1")
         result = await check_sprint_dependencies(sprint.id, adapter)
         assert result == []
 
-    @pytest.mark.asyncio
     async def test_all_dependencies_met(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         dep1 = await adapter.create_sprint(epic.id, "Dep 1")
@@ -53,7 +51,6 @@ class TestCheckSprintDependencies:
         result = await check_sprint_dependencies(sprint.id, adapter)
         assert result == []
 
-    @pytest.mark.asyncio
     async def test_unmet_dependencies(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         dep1 = await adapter.create_sprint(epic.id, "Dep 1")
@@ -65,7 +62,6 @@ class TestCheckSprintDependencies:
         result = await check_sprint_dependencies(sprint.id, adapter)
         assert set(result) == {dep1.id, dep2.id}
 
-    @pytest.mark.asyncio
     async def test_mixed_dependencies(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         dep1 = await adapter.create_sprint(epic.id, "Dep 1")
@@ -80,7 +76,6 @@ class TestCheckSprintDependencies:
 
 
 class TestValidateSprintDependencies:
-    @pytest.mark.asyncio
     async def test_raises_when_unmet(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         dep = await adapter.create_sprint(epic.id, "Dep 1")
@@ -92,7 +87,6 @@ class TestValidateSprintDependencies:
         assert exc_info.value.sprint_id == sprint.id
         assert dep.id in exc_info.value.unmet_dependencies
 
-    @pytest.mark.asyncio
     async def test_no_raise_when_all_met(self, adapter):
         epic = await adapter.create_epic("Epic", "desc")
         dep = await adapter.create_sprint(epic.id, "Dep 1")

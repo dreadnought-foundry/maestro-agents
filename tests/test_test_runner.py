@@ -59,7 +59,6 @@ class TestMockTestRunnerAgent:
         agent = MockTestRunnerAgent()
         assert isinstance(agent, ExecutionAgent)
 
-    @pytest.mark.asyncio
     async def test_returns_default_result_with_test_results_and_coverage(self) -> None:
         agent = MockTestRunnerAgent()
         ctx = _make_context()
@@ -74,7 +73,6 @@ class TestMockTestRunnerAgent:
         assert result.test_results["failed_tests"] == []
         assert result.coverage == 95.0
 
-    @pytest.mark.asyncio
     async def test_tracks_call_count_and_last_context(self) -> None:
         agent = MockTestRunnerAgent()
         ctx = _make_context(step_name="special test step")
@@ -156,7 +154,6 @@ class TestTestRunnerAgent:
         assert result.success is True
         assert result.coverage == 90.0
 
-    @pytest.mark.asyncio
     async def test_execute_returns_failure_when_subprocess_unavailable(self) -> None:
         agent = TestRunnerAgent()
         ctx = _make_context()

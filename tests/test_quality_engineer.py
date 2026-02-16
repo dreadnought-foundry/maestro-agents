@@ -60,7 +60,6 @@ class TestMockQualityEngineerAgent:
         agent = MockQualityEngineerAgent()
         assert isinstance(agent, ExecutionAgent)
 
-    @pytest.mark.asyncio
     async def test_default_result_has_approve_verdict(self) -> None:
         agent = MockQualityEngineerAgent()
         ctx = _make_context()
@@ -69,7 +68,6 @@ class TestMockQualityEngineerAgent:
         assert result.review_verdict == "approve"
         assert "acceptance criteria" in result.output.lower()
 
-    @pytest.mark.asyncio
     async def test_custom_result_with_request_changes(self) -> None:
         custom = AgentResult(
             success=False,
@@ -82,7 +80,6 @@ class TestMockQualityEngineerAgent:
         assert result.success is False
         assert result.review_verdict == "request_changes"
 
-    @pytest.mark.asyncio
     async def test_can_configure_deferred_items(self) -> None:
         custom = AgentResult(
             success=True,
@@ -96,7 +93,6 @@ class TestMockQualityEngineerAgent:
         assert len(result.deferred_items) == 2
         assert "Add integration tests" in result.deferred_items
 
-    @pytest.mark.asyncio
     async def test_tracks_call_count_and_last_context(self) -> None:
         agent = MockQualityEngineerAgent()
         assert agent.call_count == 0
@@ -164,7 +160,6 @@ class TestQualityEngineerAgent:
         prompt = agent._build_prompt(ctx)
         assert "Previous" not in prompt
 
-    @pytest.mark.asyncio
     async def test_execute_returns_failure_with_error_verdict(self) -> None:
         agent = QualityEngineerAgent()
         ctx = _make_context()
