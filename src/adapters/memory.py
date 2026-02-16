@@ -1,6 +1,19 @@
 """In-memory workflow backend for testing."""
 
-from ..workflow.models import Epic, EpicStatus, ProjectState, Sprint, SprintStatus
+from datetime import datetime
+
+from ..workflow.exceptions import InvalidTransitionError
+from ..workflow.models import (
+    Epic,
+    EpicStatus,
+    ProjectState,
+    Sprint,
+    SprintStatus,
+    SprintTransition,
+    Step,
+    StepStatus,
+)
+from ..workflow.transitions import validate_transition
 
 
 class InMemoryAdapter:
@@ -110,4 +123,120 @@ class InMemoryAdapter:
             "sprints_blocked": blocked,
             "sprints_todo": planned,
             "progress_pct": round(completed / total_sprints * 100, 1) if total_sprints > 0 else 0.0,
+        }
+
+    async def start_sprint(self, sprint_id: str) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.IN_PROGRESS)
+
+        # Auto-create steps from tasks if no steps exist
+        if not sprint.steps:
+            for i, task in enumerate(sprint.tasks, start=1):
+                sprint.steps.append(
+                    Step(id=f"step-{i}", name=task["name"])
+                )
+
+        # Set sprint status
+        sprint.status = SprintStatus.IN_PROGRESS
+
+        # Start the first step
+        if sprint.steps:
+            sprint.steps[0].status = StepStatus.IN_PROGRESS
+            sprint.steps[0].started_at = datetime.now()
+
+        # Record transition
+        sprint.transitions.append(
+            SprintTransition(
+                from_status=SprintStatus.TODO,
+                to_status=SprintStatus.IN_PROGRESS,
+                timestamp=datetime.now(),
+            )
+        )
+        return sprint
+
+    async def advance_step(self, sprint_id: str, step_output: dict | None = None) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+
+        # Find current IN_PROGRESS step
+        current_idx = None
+        for i, step in enumerate(sprint.steps):
+            if step.status is StepStatus.IN_PROGRESS:
+                current_idx = i
+                break
+
+        if current_idx is None:
+            raise ValueError(f"No step currently in progress for sprint {sprint_id}")
+
+        # Mark current step DONE
+        current_step = sprint.steps[current_idx]
+        current_step.status = StepStatus.DONE
+        current_step.completed_at = datetime.now()
+        if step_output is not None:
+            current_step.output = step_output
+
+        # If there's a next step, start it
+        next_idx = current_idx + 1
+        if next_idx < len(sprint.steps):
+            sprint.steps[next_idx].status = StepStatus.IN_PROGRESS
+            sprint.steps[next_idx].started_at = datetime.now()
+
+        return sprint
+
+    async def complete_sprint(self, sprint_id: str) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.DONE)
+
+        # Verify all steps are done or skipped
+        terminal = {StepStatus.DONE, StepStatus.SKIPPED}
+        if sprint.steps and not all(s.status in terminal for s in sprint.steps):
+            raise ValueError(
+                f"Not all steps are done for sprint {sprint_id}"
+            )
+
+        sprint.status = SprintStatus.DONE
+        sprint.transitions.append(
+            SprintTransition(
+                from_status=SprintStatus.IN_PROGRESS,
+                to_status=SprintStatus.DONE,
+                timestamp=datetime.now(),
+            )
+        )
+        return sprint
+
+    async def block_sprint(self, sprint_id: str, reason: str) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.BLOCKED)
+
+        sprint.status = SprintStatus.BLOCKED
+        sprint.transitions.append(
+            SprintTransition(
+                from_status=SprintStatus.IN_PROGRESS,
+                to_status=SprintStatus.BLOCKED,
+                timestamp=datetime.now(),
+                reason=reason,
+            )
+        )
+        return sprint
+
+    async def get_step_status(self, sprint_id: str) -> dict:
+        sprint = await self.get_sprint(sprint_id)
+
+        current_step = None
+        for step in sprint.steps:
+            if step.status is StepStatus.IN_PROGRESS:
+                current_step = step.name
+                break
+
+        total = len(sprint.steps)
+        completed = sum(1 for s in sprint.steps if s.status is StepStatus.DONE)
+
+        return {
+            "current_step": current_step,
+            "total_steps": total,
+            "completed_steps": completed,
+            "progress_pct": round(completed / total * 100, 1) if total > 0 else 0.0,
+            "steps": [
+                {"id": s.id, "name": s.name, "status": s.status.value}
+                for s in sprint.steps
+            ],
         }
