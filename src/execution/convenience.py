@@ -19,6 +19,7 @@ def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
     from src.agents.execution.test_runner import TestRunnerAgent
+    from src.agents.execution.validation_agent import ValidationAgent
 
     executor = ClaudeCodeExecutor(model=model, max_turns=max_turns)
     registry = AgentRegistry()
@@ -27,6 +28,8 @@ def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry
     registry.register("write_code", ProductEngineerAgent(executor=executor))
     registry.register("test", TestRunnerAgent(executor=executor))
     registry.register("run_tests", TestRunnerAgent(executor=executor))
+    registry.register("validate", ValidationAgent(executor=executor))
+    registry.register("validation", ValidationAgent(executor=executor))
     registry.register("review", QualityEngineerAgent(executor=executor))
     registry.register("quality_review", QualityEngineerAgent(executor=executor))
     return registry
@@ -39,6 +42,7 @@ def create_test_registry() -> AgentRegistry:
         MockProductEngineerAgent,
         MockQualityEngineerAgent,
         MockTestRunnerAgent,
+        MockValidationAgent,
     )
 
     registry = AgentRegistry()
@@ -47,6 +51,8 @@ def create_test_registry() -> AgentRegistry:
     registry.register("write_code", MockProductEngineerAgent())
     registry.register("test", MockTestRunnerAgent())
     registry.register("run_tests", MockTestRunnerAgent())
+    registry.register("validate", MockValidationAgent())
+    registry.register("validation", MockValidationAgent())
     registry.register("review", MockQualityEngineerAgent())
     registry.register("quality_review", MockQualityEngineerAgent())
     return registry

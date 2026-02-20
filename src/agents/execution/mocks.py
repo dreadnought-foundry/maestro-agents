@@ -116,3 +116,37 @@ class MockTestRunnerAgent:
         self.call_count += 1
         self.last_context = context
         return self._result
+
+
+class MockValidationAgent:
+    """Mock validation agent for testing. Returns configurable validation results."""
+
+    name: str = "mock_validation_agent"
+    description: str = "Mock validation agent for testing"
+
+    def __init__(self, result: AgentResult | None = None) -> None:
+        self._result = result or AgentResult(
+            success=True,
+            output=(
+                "VALIDATION_RESULT: PASS\n"
+                "TESTS_PASSED: 10\n"
+                "TESTS_FAILED: 0\n"
+                "COVERAGE: 95%\n"
+                "CRITERIA_MET: 3/3"
+            ),
+            test_results={
+                "total": 10,
+                "passed": 10,
+                "failed": 0,
+                "errors": 0,
+                "failed_tests": [],
+            },
+            coverage=95.0,
+        )
+        self.call_count: int = 0
+        self.last_context: StepContext | None = None
+
+    async def execute(self, context: StepContext) -> AgentResult:
+        self.call_count += 1
+        self.last_context = context
+        return self._result

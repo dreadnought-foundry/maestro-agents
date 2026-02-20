@@ -145,10 +145,12 @@ def create_default_hooks(
     If kanban_dir is provided, includes the GroomingHook (POST_COMPLETION).
     """
     from src.execution.grooming_hook import GroomingHook
+    from src.execution.validation import ValidationGate
 
     threshold = COVERAGE_THRESHOLDS.get(sprint_type, 80.0)
     hooks: list = [
         CoverageGate(threshold=threshold),
+        ValidationGate(),
         QualityReviewGate(),
         StepOrderingGate(),
         RequiredStepsGate(),
