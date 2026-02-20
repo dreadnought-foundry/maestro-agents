@@ -1,944 +1,818 @@
-"""
-Sprint lifecycle operations.
+#!/usr/bin/env python3
+"""Sprint & epic lifecycle CLI.
 
-Handles sprint creation, starting, aborting, blocking, resuming,
-and recovery operations.
+Backs all workflow skills (/sprint-start, /epic-new, etc.) with
+deterministic filesystem operations. No agents, no context cost.
+
+Usage:
+    python3 scripts/sprint_lifecycle.py <command> [args]
+
+Commands:
+    create-sprint <num> <title> [--type TYPE] [--epic NUM]
+    start-sprint <num>
+    complete-sprint <num>
+    review-sprint <num>
+    reject-sprint <num> <reason>
+    block-sprint <num> <reason>
+    resume-sprint <num>
+    abort-sprint <num> [reason]
+
+    create-epic <num> <title>
+    start-epic <num>
+    complete-epic <num>
+    archive-epic <num>
 """
 
+from __future__ import annotations
+
+import argparse
 import json
 import re
 import shutil
-from datetime import datetime
-from typing import Optional
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
 
-from ..exceptions import FileOperationError, ValidationError
-from ..registry.manager import update_registry
-from ..utils.file_ops import (
-    update_yaml_frontmatter,
-    find_project_root,
-)
-from ..utils.project import find_sprint_file, is_epic_sprint
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+COLUMNS = [
+    "0-backlog", "1-todo", "2-in-progress", "3-review",
+    "4-done", "5-blocked", "6-abandoned", "7-archived",
+]
+
+SPRINT_TYPES = [
+    "fullstack", "backend", "frontend", "research", "spike", "infrastructure",
+    "integration",
+]
 
 
-def create_sprint(
-    sprint_num: int,
-    title: str,
-    sprint_type: str = "fullstack",
-    epic: Optional[int] = None,
-    dry_run: bool = False,
-) -> dict:
+# ---------------------------------------------------------------------------
+# Primitives
+# ---------------------------------------------------------------------------
+
+def project_root() -> Path:
+    """Walk up from this script to find the project root (has kanban/)."""
+    p = Path(__file__).resolve().parent
+    while p != p.parent:
+        if (p / "kanban").is_dir():
+            return p
+        p = p.parent
+    sys.exit("Error: Could not find project root (no kanban/ directory)")
+
+
+def kanban_root() -> Path:
+    return project_root() / "kanban"
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def slugify(title: str) -> str:
+    s = title.lower()
+    s = re.sub(r"[^a-z0-9\s-]", "", s)
+    s = re.sub(r"\s+", "-", s)
+    return s.strip("-")
+
+
+# --- Find ---
+
+def find_sprint(num: int) -> Path | None:
+    """Find a sprint .md file by number across all columns."""
+    pattern = f"**/sprint-{num:02d}_*.md"
+    for col in COLUMNS:
+        col_dir = kanban_root() / col
+        if not col_dir.exists():
+            continue
+        matches = [
+            f for f in col_dir.glob(pattern)
+            if not any(s in f.name for s in ["_postmortem", "_quality", "_contracts", "_deferred"])
+        ]
+        if matches:
+            return matches[0]
+    return None
+
+
+def find_epic(num: int) -> Path | None:
+    """Find an epic folder by number across all columns."""
+    pattern = f"epic-{num:02d}_*"
+    for col in COLUMNS:
+        col_dir = kanban_root() / col
+        if not col_dir.exists():
+            continue
+        for d in col_dir.glob(pattern):
+            if d.is_dir():
+                return d
+    return None
+
+
+def sprint_column(sprint_path: Path) -> str:
+    """Get which column a sprint is in (e.g., '2-in-progress')."""
+    for part in sprint_path.parts:
+        if part in COLUMNS:
+            return part
+    return "unknown"
+
+
+def sprint_status(path: Path) -> str:
+    """Infer sprint status from filename suffixes and column."""
+    name = path.name + " " + path.parent.name  # check both
+    if "--done" in name:
+        return "done"
+    if "--aborted" in name:
+        return "aborted"
+    if "--blocked" in name:
+        return "blocked"
+    col = sprint_column(path)
+    if col == "2-in-progress":
+        return "in-progress"
+    if col == "3-review":
+        return "review"
+    if col == "4-done":
+        return "done"
+    if col == "6-abandoned":
+        return "aborted"
+    if col == "7-archived":
+        return "archived"
+    return "planning"
+
+
+def is_nested_in_epic(sprint_path: Path) -> tuple[bool, int | None]:
+    """Check if a sprint lives inside an epic folder. Return (is_nested, epic_num)."""
+    for parent in sprint_path.parents:
+        if parent.name.startswith("epic-"):
+            m = re.match(r"epic-(\d+)_", parent.name)
+            return True, int(m.group(1)) if m else None
+    return False, None
+
+
+# --- YAML ---
+
+def read_yaml(path: Path) -> dict:
+    """Read YAML frontmatter from a markdown file."""
+    content = path.read_text()
+    m = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+    if not m:
+        return {}
+    result = {}
+    for line in m.group(1).split("\n"):
+        if ":" in line:
+            key, _, val = line.partition(":")
+            val = val.strip().strip('"')
+            if val == "null" or val == "":
+                val = None
+            result[key.strip()] = val
+    return result
+
+
+def update_yaml(path: Path, **fields) -> None:
+    """Update YAML frontmatter fields in a markdown file."""
+    content = path.read_text()
+    m = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+    if not m:
+        # No frontmatter — prepend it
+        yaml_lines = ["---"]
+        for k, v in fields.items():
+            yaml_lines.append(f"{k}: {_yaml_val(v)}")
+        yaml_lines.append("---\n")
+        path.write_text("\n".join(yaml_lines) + "\n" + content)
+        return
+
+    yaml_block = m.group(1)
+    for key, val in fields.items():
+        pattern = rf"^{re.escape(key)}:\s*.*$"
+        replacement = f"{key}: {_yaml_val(val)}"
+        if re.search(pattern, yaml_block, re.MULTILINE):
+            yaml_block = re.sub(pattern, replacement, yaml_block, flags=re.MULTILINE)
+        else:
+            yaml_block += f"\n{replacement}"
+
+    new_content = content[: m.start(1)] + yaml_block + content[m.end(1) :]
+    path.write_text(new_content)
+
+
+def _yaml_val(v) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, (int, float)):
+        return str(v)
+    return f'"{v}"' if isinstance(v, str) and " " in v else str(v)
+
+
+# --- Move ---
+
+def move_to_column(path: Path, target_col: str) -> Path:
+    """Move a file or folder to a target column. Returns new path.
+
+    If the path is inside an epic folder, moves the entire epic.
     """
-    Create sprint folder structure and files.
+    target_dir = kanban_root() / target_col
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-    Creates:
-    - For epic sprints: docs/sprints/{status}/epic-{NN}_{slug}/sprint-{NN}_{slug}/sprint-{NN}_{slug}.md
-    - For standalone: docs/sprints/{status}/sprint-{NN}_{slug}/sprint-{NN}_{slug}.md
-
-    Also registers in registry if not already registered.
-
-    Args:
-        sprint_num: Sprint number to create
-        title: Sprint title
-        sprint_type: One of: fullstack, backend, frontend, research, spike, infrastructure
-        epic: Optional epic number this sprint belongs to
-        dry_run: If True, preview without creating
-
-    Returns:
-        Dict with created paths
-
-    Example:
-        >>> create_sprint(100, "Test Feature", sprint_type="fullstack", epic=99)
-    """
-    project_root = find_project_root()
-
-    # Create slug from title
-    slug = title.lower()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-    slug = re.sub(r"\s+", "-", slug)
-    slug = slug.strip("-")
-
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    # Determine folder path based on epic
-    if epic:
-        # Find epic folder
-        epic_folder = None
-        for status_dir in ["0-backlog", "1-todo", "2-in-progress"]:
-            search_path = project_root / "docs" / "sprints" / status_dir
-            if search_path.exists():
-                for folder in search_path.glob(f"epic-{epic:02d}_*"):
-                    if folder.is_dir():
-                        epic_folder = folder
-                        break
-            if epic_folder:
-                break
-
-        if not epic_folder:
-            raise ValidationError(
-                f"Epic {epic} folder not found. Create it first with create-epic."
-            )
-
-        sprint_dir = epic_folder / f"sprint-{sprint_num:02d}_{slug}"
+    nested, _ = is_nested_in_epic(path)
+    if nested:
+        # Find the epic folder and move the whole thing
+        epic_dir = path
+        while not epic_dir.name.startswith("epic-"):
+            epic_dir = epic_dir.parent
+        new_epic_dir = target_dir / epic_dir.name
+        if new_epic_dir.exists():
+            # Epic already in target — just return the equivalent path
+            rel = path.relative_to(epic_dir)
+            return new_epic_dir / rel
+        shutil.move(str(epic_dir), str(new_epic_dir))
+        rel = path.relative_to(epic_dir)
+        return new_epic_dir / rel
     else:
-        # Standalone sprint in backlog
-        sprint_dir = (
-            project_root
-            / "docs"
-            / "sprints"
-            / "0-backlog"
-            / f"sprint-{sprint_num:02d}_{slug}"
-        )
+        # Standalone sprint — move its folder or file
+        if path.is_dir():
+            new_path = target_dir / path.name
+            shutil.move(str(path), str(new_path))
+            return new_path
+        elif path.parent.name.startswith("sprint-"):
+            # Sprint in its own subfolder
+            new_dir = target_dir / path.parent.name
+            shutil.move(str(path.parent), str(new_dir))
+            return new_dir / path.name
+        else:
+            new_path = target_dir / path.name
+            shutil.move(str(path), str(new_path))
+            return new_path
 
-    sprint_file = sprint_dir / f"sprint-{sprint_num:02d}_{slug}.md"
 
-    if dry_run:
-        print(f"[DRY RUN] Would create sprint {sprint_num}:")
-        print(f"  Title: {title}")
-        print(f"  Type: {sprint_type}")
-        print(f"  Epic: {epic or 'None (standalone)'}")
-        print(f"  Folder: {sprint_dir.relative_to(project_root)}")
-        print(f"  File: {sprint_file.name}")
-        return {"sprint_dir": str(sprint_dir), "sprint_file": str(sprint_file)}
+# --- Suffix ---
 
-    # Create folder
+def add_suffix(path: Path, suffix: str) -> Path:
+    """Add a suffix like --done or --blocked to a sprint file and its parent dir."""
+    new_file_name = path.stem + f"--{suffix}" + path.suffix
+    if path.parent.name.startswith("sprint-") and f"--{suffix}" not in path.parent.name:
+        new_dir = path.parent.with_name(path.parent.name + f"--{suffix}")
+        path.parent.rename(new_dir)
+        old_file = new_dir / path.name
+        new_path = new_dir / new_file_name
+        old_file.rename(new_path)
+        return new_path
+    else:
+        new_path = path.with_name(new_file_name)
+        path.rename(new_path)
+        return new_path
+
+
+def remove_suffix(path: Path, suffix: str) -> Path:
+    """Remove a suffix like --blocked from a sprint file and its parent dir."""
+    new_file_name = path.name.replace(f"--{suffix}", "")
+    if path.parent.name.startswith("sprint-") and f"--{suffix}" in path.parent.name:
+        new_dir = path.parent.with_name(path.parent.name.replace(f"--{suffix}", ""))
+        path.parent.rename(new_dir)
+        old_file = new_dir / path.name
+        new_path = new_dir / new_file_name
+        old_file.rename(new_path)
+        return new_path
+    else:
+        new_path = path.with_name(new_file_name)
+        path.rename(new_path)
+        return new_path
+
+
+# --- State file ---
+
+def state_path(num: int) -> Path:
+    return project_root() / ".claude" / f"sprint-{num}-state.json"
+
+
+def create_state(num: int, sprint_path: Path, title: str) -> None:
+    """Create .claude/sprint-N-state.json."""
+    root = project_root()
+    sp = state_path(num)
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "sprint_number": num,
+        "sprint_file": str(sprint_path.relative_to(root)),
+        "sprint_title": title,
+        "status": "in_progress",
+        "current_phase": 1,
+        "current_step": "1.1",
+        "started_at": now_iso(),
+        "completed_steps": [],
+    }
+    sp.write_text(json.dumps(state, indent=2) + "\n")
+
+
+def update_state(num: int, **fields) -> None:
+    """Update fields in the state file."""
+    sp = state_path(num)
+    if not sp.exists():
+        return
+    state = json.loads(sp.read_text())
+    state.update(fields)
+    sp.write_text(json.dumps(state, indent=2) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Sprint commands
+# ---------------------------------------------------------------------------
+
+def cmd_create_sprint(args) -> None:
+    num, title = args.num, args.title
+    slug = slugify(title)
+    sprint_type = args.type
+
+    if args.epic:
+        epic_dir = find_epic(args.epic)
+        if not epic_dir:
+            sys.exit(f"Error: Epic {args.epic} not found. Create it first.")
+        parent = epic_dir
+    else:
+        parent = kanban_root() / "0-backlog"
+        parent.mkdir(parents=True, exist_ok=True)
+
+    sprint_dir = parent / f"sprint-{num:02d}_{slug}"
+    sprint_file = sprint_dir / f"sprint-{num:02d}_{slug}.md"
     sprint_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create sprint file content
-    sprint_content = f"""---
-sprint: {sprint_num}
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    content = f"""---
+sprint: {num}
 title: "{title}"
 type: {sprint_type}
-epic: {epic if epic else 'null'}
+epic: {args.epic or 'null'}
 status: planning
-created: {today_iso}
+created: {now_iso()}
 started: null
 completed: null
 hours: null
-workflow_version: "3.1.0"
 ---
 
-# Sprint {sprint_num}: {title}
+# Sprint {num}: {title}
 
 ## Overview
 
 | Field | Value |
 |-------|-------|
-| Sprint | {sprint_num} |
+| Sprint | {num} |
 | Title | {title} |
 | Type | {sprint_type} |
-| Epic | {epic if epic else 'None'} |
+| Epic | {args.epic or 'None'} |
 | Status | Planning |
 | Created | {today} |
-| Started | - |
-| Completed | - |
 
 ## Goal
 
-{{One sentence describing what this sprint accomplishes}}
-
-## Background
-
-{{Why is this needed? What problem does it solve?}}
-
-## Requirements
-
-### Functional Requirements
-
-- [ ] {{Requirement 1}}
-- [ ] {{Requirement 2}}
-
-### Non-Functional Requirements
-
-- [ ] {{Performance, security, or other constraints}}
-
-## Dependencies
-
-- **Sprints**: None
-- **External**: None
-
-## Scope
-
-### In Scope
-
-- {{What's included}}
-
-### Out of Scope
-
-- {{What's explicitly NOT included}}
-
-## Technical Approach
-
-{{High-level description of how this will be implemented}}
+_To be defined_
 
 ## Tasks
 
 ### Phase 1: Planning
 - [ ] Review requirements
-- [ ] Design architecture
-- [ ] Clarify requirements
+- [ ] Design approach
 
 ### Phase 2: Implementation
-- [ ] Write tests
 - [ ] Implement feature
-- [ ] Fix test failures
+- [ ] Write tests
 
 ### Phase 3: Validation
 - [ ] Quality review
-- [ ] Refactoring
-
-### Phase 4: Documentation
-- [ ] Update docs
 
 ## Acceptance Criteria
 
 - [ ] All tests passing
 - [ ] Code reviewed
-
-## Notes
-
-Created: {today}
 """
-
-    with open(sprint_file, "w") as f:
-        f.write(sprint_content)
-
-    # Register in registry
-    registry_path = project_root / "docs" / "sprints" / "registry.json"
-    with open(registry_path) as f:
-        registry = json.load(f)
-
-    sprint_key = str(sprint_num)
-    if sprint_key not in registry.get("sprints", {}):
-        if "sprints" not in registry:
-            registry["sprints"] = {}
-        registry["sprints"][sprint_key] = {
-            "title": title,
-            "status": "planning",
-            "epic": epic,
-            "type": sprint_type,
-            "created": today,
-            "started": None,
-            "completed": None,
-            "hours": None,
-        }
-        # Update nextSprintNumber if needed
-        if registry.get("nextSprintNumber", 1) <= sprint_num:
-            registry["nextSprintNumber"] = sprint_num + 1
-
-        with open(registry_path, "w") as f:
-            json.dump(registry, f, indent=2)
-
-    # Update epic's totalSprints count
-    if epic:
-        epic_key = str(epic)
-        if epic_key in registry.get("epics", {}):
-            registry["epics"][epic_key]["totalSprints"] = (
-                registry["epics"][epic_key].get("totalSprints", 0) + 1
-            )
-            with open(registry_path, "w") as f:
-                json.dump(registry, f, indent=2)
-
-    print(f"✓ Created sprint {sprint_num}: {title}")
-    print(f"  Type: {sprint_type}")
-    print(f"  Epic: {epic or 'None (standalone)'}")
-    print(f"  Folder: {sprint_dir.relative_to(project_root)}")
-
-    return {"sprint_dir": str(sprint_dir), "sprint_file": str(sprint_file)}
+    sprint_file.write_text(content)
+    print(f"Created sprint {num}: {title}")
+    print(f"  File: {sprint_file.relative_to(project_root())}")
 
 
-def start_sprint(sprint_num: int, dry_run: bool = False) -> dict:
-    """
-    Start a sprint: move to in-progress, create state file, update YAML.
+def cmd_start_sprint(args) -> None:
+    num = args.num
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
 
-    Args:
-        sprint_num: Sprint number to start
-        dry_run: If True, preview changes without executing
+    status = sprint_status(path)
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is already done")
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is aborted")
+    if status == "blocked":
+        sys.exit(f"Error: Sprint {num} is blocked. Use resume-sprint first.")
 
-    Returns:
-        Dict with start summary
+    # A sprint in 2-in-progress (because its epic was moved) but with
+    # YAML status still "planning" hasn't been individually started yet.
+    yaml = read_yaml(path)
+    yaml_status = yaml.get("status", "planning")
+    if status == "in-progress" and yaml_status not in ("planning", "null", None):
+        sys.exit(f"Error: Sprint {num} is already in progress")
 
-    Raises:
-        FileOperationError: If sprint file not found
-        ValidationError: If sprint already started or in wrong state
+    title = yaml.get("title", f"Sprint {num}")
 
-    Example:
-        >>> summary = start_sprint(3)
-        >>> print(summary['status'])  # 'started'
-    """
-    project_root = find_project_root()
+    update_yaml(path, status="in-progress", started=now_iso())
 
-    # Find sprint in backlog, todo, or in-progress (for epic sprints)
-    sprint_file = None
-    already_in_progress = False
+    col = sprint_column(path)
+    if col != "2-in-progress":
+        path = move_to_column(path, "2-in-progress")
 
-    for folder in ["0-backlog", "1-todo"]:
-        search_path = project_root / "docs" / "sprints" / folder
-        if search_path.exists():
-            found = list(search_path.glob(f"**/sprint-{sprint_num:02d}_*.md"))
-            if found:
-                sprint_file = found[0]
-                break
+    create_state(num, path, title)
 
-    # If not found in backlog/todo, check if it's an epic sprint already in progress
-    if not sprint_file:
-        search_path = project_root / "docs" / "sprints" / "2-in-progress"
-        if search_path.exists():
-            # Look for sprint in epic folders (exclude --done files)
-            found = [
-                f
-                for f in search_path.glob(f"**/sprint-{sprint_num:02d}_*.md")
-                if "--done" not in f.name
-            ]
-            if found:
-                sprint_file = found[0]
-                already_in_progress = True
+    print(f"Sprint {num}: {title} — STARTED")
+    print(f"  File: {path.relative_to(project_root())}")
+    print(f"  State: {state_path(num).name}")
 
-    if not sprint_file:
-        raise FileOperationError(
-            f"Sprint {sprint_num} not found in backlog, todo, or in-progress folders"
-        )
 
-    # Check if sprint is in an epic
-    is_epic, epic_num = is_epic_sprint(sprint_file)
+def cmd_complete_sprint(args) -> None:
+    num = args.num
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
 
-    # Read content and check for YAML frontmatter
-    with open(sprint_file) as f:
-        content = f.read()
+    status = sprint_status(path)
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is already done")
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is aborted — cannot complete")
+    if status == "blocked":
+        sys.exit(f"Error: Sprint {num} is blocked. Use resume-sprint first.")
+    if status not in ("in-progress", "review"):
+        sys.exit(f"Error: Sprint {num} is not in progress or review (status: {status})")
 
-    import re
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
 
-    yaml_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+    # Calculate hours
+    hours = None
+    started = yaml.get("started")
+    if started and started != "null":
+        try:
+            start_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            hours = round((datetime.now(timezone.utc) - start_dt).total_seconds() / 3600, 1)
+        except ValueError:
+            pass
 
-    if yaml_match:
-        # Parse existing frontmatter
-        yaml_content = yaml_match.group(1)
-        title_match = re.search(r"^title:\s*(.+)$", yaml_content, re.MULTILINE)
-        if title_match:
-            title = title_match.group(1).strip().strip('"')
-        else:
-            # Try to get title from markdown heading
-            heading_match = re.search(
-                r"^#\s+Sprint\s+\d+:\s*(.+)$", content, re.MULTILINE
-            )
-            title = (
-                heading_match.group(1).strip()
-                if heading_match
-                else f"Sprint {sprint_num}"
-            )
-    else:
-        # No frontmatter - extract title from markdown heading and add frontmatter
-        heading_match = re.search(r"^#\s+Sprint\s+\d+:\s*(.+)$", content, re.MULTILINE)
-        title = (
-            heading_match.group(1).strip() if heading_match else f"Sprint {sprint_num}"
-        )
+    update_yaml(path, status="done", completed=now_iso(), **({} if hours is None else {"hours": hours}))
+    path = add_suffix(path, "done")
 
-        # Read WORKFLOW_VERSION
-        version_file = project_root / ".claude" / "WORKFLOW_VERSION"
-        workflow_version = (
-            version_file.read_text().strip() if version_file.exists() else "3.1.0"
-        )
+    nested, _ = is_nested_in_epic(path)
+    if not nested:
+        path = move_to_column(path, "4-done")
 
-        # Add YAML frontmatter to file
-        frontmatter = f"""---
-sprint: {sprint_num}
+    update_state(num, status="done", completed_at=now_iso())
+
+    print(f"Sprint {num}: {title} — COMPLETE")
+    print(f"  File: {path.relative_to(project_root())}")
+    if hours:
+        print(f"  Hours: {hours}")
+
+
+def cmd_review_sprint(args) -> None:
+    num = args.num
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status == "review":
+        sys.exit(f"Error: Sprint {num} is already in review")
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is already done")
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is aborted — cannot review")
+    if status == "blocked":
+        sys.exit(f"Error: Sprint {num} is blocked. Use resume-sprint first.")
+    if status == "planning":
+        sys.exit(f"Error: Sprint {num} hasn't been started yet")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="review")
+
+    col = sprint_column(path)
+    if col != "3-review":
+        path = move_to_column(path, "3-review")
+
+    update_state(num, status="review")
+
+    print(f"Sprint {num}: {title} — IN REVIEW")
+    print(f"  File: {path.relative_to(project_root())}")
+    print(f"  Complete: python3 scripts/sprint_lifecycle.py complete-sprint {num}")
+    print(f"  Reject:   python3 scripts/sprint_lifecycle.py reject-sprint {num} \"reason\"")
+
+
+def cmd_reject_sprint(args) -> None:
+    num, reason = args.num, args.reason
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status != "review":
+        sys.exit(f"Error: Sprint {num} is not in review (status: {status})")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="in-progress", rejection_reason=reason, rejected_at=now_iso())
+
+    col = sprint_column(path)
+    if col != "2-in-progress":
+        path = move_to_column(path, "2-in-progress")
+
+    update_state(num, status="in_progress", rejection_reason=reason, rejected_at=now_iso())
+
+    print(f"Sprint {num}: {title} — REJECTED")
+    print(f"  Reason: {reason}")
+    print(f"  File: {path.relative_to(project_root())}")
+    print(f"  Sprint moved back to In Progress for rework.")
+
+
+def cmd_block_sprint(args) -> None:
+    num, reason = args.num, args.reason
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status == "blocked":
+        sys.exit(f"Error: Sprint {num} is already blocked")
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is done — cannot block")
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is aborted — cannot block")
+    if status == "planning":
+        sys.exit(f"Error: Sprint {num} hasn't been started yet")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="blocked", blocked_at=now_iso(), blocker=reason)
+    path = add_suffix(path, "blocked")
+    update_state(num, status="blocked", blocked_at=now_iso(), blocker=reason)
+
+    print(f"Sprint {num}: {title} — BLOCKED")
+    print(f"  Reason: {reason}")
+    print(f"  Resume: python3 scripts/sprint_lifecycle.py resume-sprint {num}")
+
+
+def cmd_resume_sprint(args) -> None:
+    num = args.num
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status != "blocked":
+        sys.exit(f"Error: Sprint {num} is not blocked (status: {status})")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+    blocker = yaml.get("blocker", "unknown")
+
+    update_yaml(path, status="in-progress", resumed_at=now_iso(), previous_blocker=blocker)
+    path = remove_suffix(path, "blocked")
+    update_state(num, status="in_progress", resumed_at=now_iso(), previous_blocker=blocker)
+
+    print(f"Sprint {num}: {title} — RESUMED")
+    print(f"  Was blocked by: {blocker}")
+
+
+def cmd_abort_sprint(args) -> None:
+    num = args.num
+    reason = args.reason or "No reason given"
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is already aborted")
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is done — cannot abort")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="aborted", aborted_at=now_iso(), abort_reason=reason)
+    path = add_suffix(path, "aborted")
+    update_state(num, status="aborted", aborted_at=now_iso(), abort_reason=reason)
+
+    print(f"Sprint {num}: {title} — ABORTED")
+    print(f"  Reason: {reason}")
+
+
+# ---------------------------------------------------------------------------
+# Epic commands
+# ---------------------------------------------------------------------------
+
+def cmd_create_epic(args) -> None:
+    num, title = args.num, args.title
+    slug = slugify(title)
+
+    epic_dir = kanban_root() / "1-todo" / f"epic-{num:02d}_{slug}"
+    epic_file = epic_dir / "_epic.md"
+    epic_dir.mkdir(parents=True, exist_ok=True)
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    content = f"""---
+epic: {num}
 title: "{title}"
-epic: {epic_num if is_epic else 'null'}
 status: planning
-created: {datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")}
+created: {today}
 started: null
 completed: null
-hours: null
-workflow_version: "{workflow_version}"
 ---
 
+# Epic {num:02d}: {title}
+
+## Overview
+
+_To be defined_
+
+## Sprints
+
+| Sprint | Title | Status |
+|--------|-------|--------|
+| -- | TBD | planned |
+
+## Success Criteria
+
+- [ ] _Define measurable outcomes_
 """
-        with open(sprint_file, "w") as f:
-            f.write(frontmatter + content)
-        print("✓ Added YAML frontmatter to sprint file")
+    epic_file.write_text(content)
+    print(f"Created epic {num}: {title}")
+    print(f"  Folder: {epic_dir.relative_to(project_root())}")
 
-    if dry_run:
-        print(f"[DRY RUN] Would start sprint {sprint_num}:")
-        print(f"  Title: {title}")
-        print(f"  Epic: {epic_num if is_epic else 'standalone'}")
-        if already_in_progress:
-            print("  1. Sprint already in 2-in-progress/ (epic sprint)")
-        else:
-            print("  1. Move to 2-in-progress/")
-        print("  2. Update YAML (status=in-progress, started=<now>)")
-        print(f"  3. Create state file .claude/sprint-{sprint_num}-state.json")
-        return {"status": "dry-run", "sprint_num": sprint_num}
 
-    # Update YAML frontmatter
-    started_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    update_yaml_frontmatter(
-        sprint_file, {"status": "in-progress", "started": started_time}
+def cmd_start_epic(args) -> None:
+    num = args.num
+    epic_dir = find_epic(num)
+    if not epic_dir:
+        sys.exit(f"Error: Epic {num} not found")
+
+    col = None
+    for part in epic_dir.parts:
+        if part in COLUMNS:
+            col = part
+    if col == "2-in-progress":
+        sys.exit(f"Epic {num} is already in progress")
+
+    epic_file = epic_dir / "_epic.md"
+    if not epic_file.exists():
+        sys.exit(f"Error: Epic {num} has no _epic.md")
+
+    yaml = read_yaml(epic_file)
+    title = yaml.get("title", f"Epic {num}")
+
+    update_yaml(epic_file, status="in-progress", started=now_iso())
+
+    # Move entire epic folder to in-progress
+    target = kanban_root() / "2-in-progress"
+    target.mkdir(parents=True, exist_ok=True)
+    new_dir = target / epic_dir.name
+    shutil.move(str(epic_dir), str(new_dir))
+
+    sprint_count = len(list(new_dir.glob("**/sprint-*.md")))
+
+    print(f"Epic {num}: {title} — STARTED")
+    print(f"  Location: {new_dir.relative_to(project_root())}")
+    print(f"  Sprints: {sprint_count}")
+
+
+def cmd_complete_epic(args) -> None:
+    num = args.num
+    epic_dir = find_epic(num)
+    if not epic_dir:
+        sys.exit(f"Error: Epic {num} not found")
+
+    epic_file = epic_dir / "_epic.md"
+    if not epic_file.exists():
+        sys.exit(f"Error: Epic {num} has no _epic.md")
+
+    # Check all sprints are done or aborted
+    sprint_files = [
+        f for f in epic_dir.glob("**/sprint-*.md")
+        if not any(s in f.name for s in ["_postmortem", "_quality", "_contracts", "_deferred"])
+    ]
+    unfinished = [
+        f.name for f in sprint_files
+        if "--done" not in f.name and "--aborted" not in f.name
+        and "--done" not in f.parent.name and "--aborted" not in f.parent.name
+    ]
+    if unfinished:
+        print(f"Error: Epic {num} has unfinished sprints:")
+        for name in unfinished:
+            print(f"  - {name}")
+        sys.exit(1)
+
+    yaml = read_yaml(epic_file)
+    title = yaml.get("title", f"Epic {num}")
+
+    update_yaml(epic_file, status="done", completed=now_iso())
+
+    # Move to 4-done
+    target = kanban_root() / "4-done"
+    target.mkdir(parents=True, exist_ok=True)
+    new_dir = target / epic_dir.name
+    shutil.move(str(epic_dir), str(new_dir))
+
+    print(f"Epic {num}: {title} — COMPLETE")
+    print(f"  Location: {new_dir.relative_to(project_root())}")
+
+
+def cmd_archive_epic(args) -> None:
+    num = args.num
+    epic_dir = find_epic(num)
+    if not epic_dir:
+        sys.exit(f"Error: Epic {num} not found")
+
+    epic_file = epic_dir / "_epic.md"
+    yaml = read_yaml(epic_file) if epic_file.exists() else {}
+    title = yaml.get("title", f"Epic {num}")
+
+    if epic_file.exists():
+        update_yaml(epic_file, status="archived", archived_at=now_iso())
+
+    target = kanban_root() / "7-archived"
+    target.mkdir(parents=True, exist_ok=True)
+    new_dir = target / epic_dir.name
+    shutil.move(str(epic_dir), str(new_dir))
+
+    print(f"Epic {num}: {title} — ARCHIVED")
+    print(f"  Location: {new_dir.relative_to(project_root())}")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Sprint & epic lifecycle operations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    # Move to in-progress (skip if already there - epic sprint case)
-    if already_in_progress:
-        new_path = sprint_file
-        print(f"✓ Sprint already in progress (epic sprint): {sprint_file}")
-    else:
-        in_progress_dir = project_root / "docs" / "sprints" / "2-in-progress"
-        in_progress_dir.mkdir(parents=True, exist_ok=True)
-
-        if is_epic:
-            # Find the epic folder (could be parent or grandparent)
-            if sprint_file.parent.name.startswith("sprint-"):
-                epic_folder = sprint_file.parent.parent
-                sprint_folder_name = sprint_file.parent.name
-            else:
-                epic_folder = sprint_file.parent
-                sprint_folder_name = None
-
-            # Check if epic is in 0-backlog or 1-todo - if so, move entire epic
-            if "0-backlog" in str(epic_folder) or "1-todo" in str(epic_folder):
-                # Move entire epic folder to 2-in-progress
-                new_epic_folder = in_progress_dir / epic_folder.name
-                if new_epic_folder.exists():
-                    # Epic already partially in progress, just move the sprint
-                    if sprint_folder_name:
-                        old_sprint_dir = sprint_file.parent
-                        new_sprint_dir = new_epic_folder / sprint_folder_name
-                        shutil.move(str(old_sprint_dir), str(new_sprint_dir))
-                        new_path = new_sprint_dir / sprint_file.name
-                    else:
-                        new_path = new_epic_folder / sprint_file.name
-                        shutil.move(str(sprint_file), str(new_path))
-                else:
-                    # Move entire epic folder
-                    shutil.move(str(epic_folder), str(new_epic_folder))
-                    print(
-                        f"✓ Moved epic folder to: {new_epic_folder.relative_to(project_root)}"
-                    )
-                    if sprint_folder_name:
-                        new_path = (
-                            new_epic_folder / sprint_folder_name / sprint_file.name
-                        )
-                    else:
-                        new_path = new_epic_folder / sprint_file.name
-            else:
-                # Epic already in progress folder
-                new_path = sprint_file
-        else:
-            # Standalone sprint - check if in its own folder
-            if sprint_file.parent.name.startswith("sprint-"):
-                old_sprint_dir = sprint_file.parent
-                new_sprint_dir = in_progress_dir / sprint_file.parent.name
-                shutil.move(str(old_sprint_dir), str(new_sprint_dir))
-                new_path = new_sprint_dir / sprint_file.name
-            else:
-                new_path = in_progress_dir / sprint_file.name
-                shutil.move(str(sprint_file), str(new_path))
-
-        print(f"✓ Moved to: {new_path}")
-
-    # Create state file
-    state_file = project_root / ".claude" / f"sprint-{sprint_num}-state.json"
-    state = {
-        "sprint_number": sprint_num,
-        "sprint_file": str(new_path.relative_to(project_root)),
-        "sprint_title": title,
-        "status": "in_progress",
-        "current_phase": 1,
-        "current_step": "1.1",
-        "started_at": started_time,
-        "workflow_version": "3.0",
-        "completed_steps": [],
-    }
-
-    state_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(state_file, "w") as f:
-        json.dump(state, f, indent=2)
-    print(f"✓ State file created: {state_file.name}")
-
-    summary = {
-        "status": "started",
-        "sprint_num": sprint_num,
-        "title": title,
-        "file_path": str(new_path),
-        "epic": epic_num if is_epic else None,
-    }
-
-    print(f"\n{'='*60}")
-    print(f"Sprint {sprint_num}: {title} - STARTED ✓")
-    print(f"{'='*60}")
-    print(f"File: {new_path.relative_to(project_root)}")
-    if is_epic:
-        print(f"Epic: {epic_num}")
-    print("Next: Begin Phase 1 (Planning)")
-    print(f"{'='*60}")
-
-    return summary
-
-
-def abort_sprint(sprint_num: int, reason: str, dry_run: bool = False) -> dict:
-    """
-    Abort a sprint: rename with --aborted suffix, update state.
-
-    Args:
-        sprint_num: Sprint number to abort
-        reason: Reason for aborting
-        dry_run: If True, preview changes without executing
-
-    Returns:
-        Dict with abort summary
-
-    Raises:
-        FileOperationError: If sprint file not found
-        ValidationError: If sprint already aborted
-
-    Example:
-        >>> summary = abort_sprint(4, "Requirements changed")
-        >>> print(summary['status'])  # 'aborted'
-    """
-    project_root = find_project_root()
-    sprint_file = find_sprint_file(sprint_num, project_root)
-
-    if not sprint_file:
-        raise FileOperationError(f"Sprint {sprint_num} not found")
-
-    # Check if already aborted
-    if "--aborted" in sprint_file.name:
-        raise ValidationError(f"Sprint {sprint_num} already aborted: {sprint_file}")
-
-    # Read YAML for metadata
-    with open(sprint_file) as f:
-        content = f.read()
-
-    import re
-
-    yaml_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not yaml_match:
-        raise ValidationError(f"Sprint {sprint_num} missing YAML frontmatter")
-
-    yaml_content = yaml_match.group(1)
-    title_match = re.search(r"^title:\s*(.+)$", yaml_content, re.MULTILINE)
-    started_match = re.search(r"^started:\s*(.+)$", yaml_content, re.MULTILINE)
-
-    title = title_match.group(1).strip().strip('"') if title_match else "Unknown"
-
-    # Calculate hours if started
-    hours = None
-    if started_match:
-        started_str = started_match.group(1).strip()
-        # Only calculate hours if started is not null
-        if started_str and started_str.lower() != "null":
-            started = datetime.fromisoformat(started_str.replace("Z", "+00:00"))
-            aborted = datetime.now().astimezone()
-            hours = round((aborted - started).total_seconds() / 3600, 1)
-
-    if dry_run:
-        print(f"[DRY RUN] Would abort sprint {sprint_num}:")
-        print(f"  Title: {title}")
-        print(f"  Reason: {reason}")
-        print(f"  Hours: {hours if hours else 'N/A'}")
-        print("  1. Update YAML (status=aborted, reason, hours)")
-        print("  2. Rename with --aborted suffix")
-        print("  3. Update state file")
-        return {"status": "dry-run", "sprint_num": sprint_num}
-
-    # Update YAML frontmatter
-    aborted_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    updates = {"status": "aborted", "aborted_at": aborted_time, "abort_reason": reason}
-    if hours:
-        updates["hours"] = hours
-
-    update_yaml_frontmatter(sprint_file, updates)
-
-    # Rename with --aborted suffix
-    if sprint_file.parent.name.startswith("sprint-"):
-        # Sprint in subdirectory
-        sprint_subdir = sprint_file.parent
-        new_dir_name = sprint_subdir.name + "--aborted"
-        new_subdir = sprint_subdir.with_name(new_dir_name)
-        sprint_subdir.rename(new_subdir)
-
-        new_name = sprint_file.name.replace(".md", "--aborted.md")
-        new_path = new_subdir / new_name
-        (new_subdir / sprint_file.name).rename(new_path)
-    else:
-        # Sprint file directly in folder
-        new_name = sprint_file.name.replace(".md", "--aborted.md")
-        new_path = sprint_file.with_name(new_name)
-        sprint_file.rename(new_path)
-
-    print(f"✓ Renamed to: {new_path.name}")
-
-    # Update state file
-    state_file = project_root / ".claude" / f"sprint-{sprint_num}-state.json"
-    if state_file.exists():
-        with open(state_file) as f:
-            state = json.load(f)
-        state["status"] = "aborted"
-        state["aborted_at"] = aborted_time
-        state["abort_reason"] = reason
-        with open(state_file, "w") as f:
-            json.dump(state, f, indent=2)
-        print("✓ State file updated")
-
-    # Update registry
-    update_registry(
-        sprint_num, status="aborted", abort_reason=reason, hours=hours if hours else 0
-    )
-    print("✓ Registry updated")
-
-    summary = {
-        "status": "aborted",
-        "sprint_num": sprint_num,
-        "title": title,
-        "reason": reason,
-        "hours": hours,
-        "file_path": str(new_path),
-    }
-
-    print(f"\n{'='*60}")
-    print(f"Sprint {sprint_num}: {title} - ABORTED")
-    print(f"{'='*60}")
-    print(f"Reason: {reason}")
-    print(f"Hours before abort: {hours if hours else 'N/A'}")
-    print(f"File: {new_path.name}")
-    print(f"{'='*60}")
-
-    return summary
-
-
-def block_sprint(sprint_num: int, reason: str, dry_run: bool = False) -> dict:
-    """
-    Block a sprint: rename with --blocked suffix, update state.
-
-    Args:
-        sprint_num: Sprint number to block
-        reason: Reason for blocking
-        dry_run: If True, preview changes without executing
-
-    Returns:
-        Dict with block summary
-
-    Raises:
-        FileOperationError: If sprint file not found
-        ValidationError: If sprint already blocked
-
-    Example:
-        >>> summary = block_sprint(4, "Waiting for API access")
-        >>> print(summary['status'])  # 'blocked'
-    """
-    project_root = find_project_root()
-    sprint_file = find_sprint_file(sprint_num, project_root)
-
-    if not sprint_file:
-        raise FileOperationError(f"Sprint {sprint_num} not found")
-
-    # Check if already blocked
-    if "--blocked" in sprint_file.name:
-        raise ValidationError(f"Sprint {sprint_num} already blocked: {sprint_file}")
-
-    # Read YAML for metadata
-    with open(sprint_file) as f:
-        content = f.read()
-
-    import re
-
-    yaml_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not yaml_match:
-        raise ValidationError(f"Sprint {sprint_num} missing YAML frontmatter")
-
-    yaml_content = yaml_match.group(1)
-    title_match = re.search(r"^title:\s*(.+)$", yaml_content, re.MULTILINE)
-    started_match = re.search(r"^started:\s*(.+)$", yaml_content, re.MULTILINE)
-
-    title = title_match.group(1).strip().strip('"') if title_match else "Unknown"
-
-    # Calculate hours worked so far
-    hours = None
-    if started_match:
-        started_str = started_match.group(1).strip()
-        if started_str and started_str.lower() != "null":
-            started = datetime.fromisoformat(started_str.replace("Z", "+00:00"))
-            blocked = datetime.now().astimezone()
-            hours = round((blocked - started).total_seconds() / 3600, 1)
-
-    if dry_run:
-        print(f"[DRY RUN] Would block sprint {sprint_num}:")
-        print(f"  Title: {title}")
-        print(f"  Reason: {reason}")
-        print(f"  Hours so far: {hours if hours else 'N/A'}")
-        print("  1. Update YAML (status=blocked, blocker, hours_before_block)")
-        print("  2. Rename with --blocked suffix")
-        print("  3. Update state file")
-        return {"status": "dry-run", "sprint_num": sprint_num}
-
-    # Update YAML frontmatter
-    blocked_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    updates = {"status": "blocked", "blocked_at": blocked_time, "blocker": reason}
-    if hours:
-        updates["hours_before_block"] = hours
-
-    update_yaml_frontmatter(sprint_file, updates)
-
-    # Rename with --blocked suffix
-    if sprint_file.parent.name.startswith("sprint-"):
-        # Sprint in subdirectory
-        sprint_subdir = sprint_file.parent
-        new_dir_name = sprint_subdir.name + "--blocked"
-        new_subdir = sprint_subdir.with_name(new_dir_name)
-        sprint_subdir.rename(new_subdir)
-
-        new_name = sprint_file.name.replace(".md", "--blocked.md")
-        new_path = new_subdir / new_name
-    else:
-        # Sprint file directly in folder
-        new_name = sprint_file.name.replace(".md", "--blocked.md")
-        new_path = sprint_file.with_name(new_name)
-        sprint_file.rename(new_path)
-
-    # Update state file
-    state_file = project_root / ".claude" / f"sprint-{sprint_num}-state.json"
-    if state_file.exists():
-        with open(state_file) as f:
-            state = json.load(f)
-        state["status"] = "blocked"
-        state["blocked_at"] = blocked_time
-        state["blocker"] = reason
-        with open(state_file, "w") as f:
-            json.dump(state, f, indent=2)
-
-    summary = {
-        "sprint_num": sprint_num,
-        "title": title,
-        "status": "blocked",
-        "reason": reason,
-        "hours": hours,
-        "new_path": str(new_path),
-    }
-
-    print(f"\n{'='*60}")
-    print(f"Sprint {sprint_num}: {title} - BLOCKED")
-    print(f"{'='*60}")
-    print(f"Blocker: {reason}")
-    print(f"Hours before block: {hours if hours else 'N/A'}")
-    print(f"File: {new_path.name}")
-    print(f"To resume: /sprint-resume {sprint_num}")
-    print(f"{'='*60}")
-
-    return summary
-
-
-def resume_sprint(sprint_num: int, dry_run: bool = False) -> dict:
-    """
-    Resume a blocked sprint: remove --blocked suffix, update state.
-
-    Args:
-        sprint_num: Sprint number to resume
-        dry_run: If True, preview changes without executing
-
-    Returns:
-        Dict with resume summary
-
-    Raises:
-        FileOperationError: If sprint file not found
-        ValidationError: If sprint not blocked
-
-    Example:
-        >>> summary = resume_sprint(4)
-        >>> print(summary['status'])  # 'resumed'
-    """
-    project_root = find_project_root()
-    sprint_file = find_sprint_file(sprint_num, project_root)
-
-    if not sprint_file:
-        raise FileOperationError(f"Sprint {sprint_num} not found")
-
-    # Check if sprint is blocked
-    if "--blocked" not in sprint_file.name:
-        raise ValidationError(
-            f"Sprint {sprint_num} is not blocked. Current state: {sprint_file.name}"
-        )
-
-    # Read YAML for metadata
-    with open(sprint_file) as f:
-        content = f.read()
-
-    import re
-
-    yaml_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not yaml_match:
-        raise ValidationError(f"Sprint {sprint_num} missing YAML frontmatter")
-
-    yaml_content = yaml_match.group(1)
-    title_match = re.search(r"^title:\s*(.+)$", yaml_content, re.MULTILINE)
-    blocker_match = re.search(r"^blocker:\s*(.+)$", yaml_content, re.MULTILINE)
-    hours_match = re.search(
-        r"^hours_before_block:\s*([0-9.]+)", yaml_content, re.MULTILINE
-    )
-
-    title = title_match.group(1).strip().strip('"') if title_match else "Unknown"
-    blocker = blocker_match.group(1).strip().strip('"') if blocker_match else "Unknown"
-    hours_before = float(hours_match.group(1)) if hours_match else None
-
-    if dry_run:
-        print(f"[DRY RUN] Would resume sprint {sprint_num}:")
-        print(f"  Title: {title}")
-        print(f"  Was blocked by: {blocker}")
-        print(f"  Hours before block: {hours_before if hours_before else 'N/A'}")
-        print("  1. Update YAML (status=in-progress, resumed_at, previous_blocker)")
-        print("  2. Remove --blocked suffix")
-        print("  3. Update state file")
-        return {"status": "dry-run", "sprint_num": sprint_num}
-
-    # Update YAML frontmatter
-    resumed_time = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    updates = {
-        "status": "in-progress",
-        "resumed_at": resumed_time,
-        "previous_blocker": blocker,
-    }
-    # Remove blocked-specific fields
-    updates["blocker"] = None
-    updates["blocked_at"] = None
-
-    update_yaml_frontmatter(sprint_file, updates)
-
-    # Remove --blocked suffix
-    if (
-        sprint_file.parent.name.startswith("sprint-")
-        and "--blocked" in sprint_file.parent.name
-    ):
-        # Sprint in subdirectory
-        sprint_subdir = sprint_file.parent
-        new_dir_name = sprint_subdir.name.replace("--blocked", "")
-        new_subdir = sprint_subdir.with_name(new_dir_name)
-        sprint_subdir.rename(new_subdir)
-
-        new_name = sprint_file.name.replace("--blocked", "")
-        new_path = new_subdir / new_name
-    else:
-        # Sprint file directly in folder
-        new_name = sprint_file.name.replace("--blocked", "")
-        new_path = sprint_file.with_name(new_name)
-        sprint_file.rename(new_path)
-
-    # Update state file
-    state_file = project_root / ".claude" / f"sprint-{sprint_num}-state.json"
-    if state_file.exists():
-        with open(state_file) as f:
-            state = json.load(f)
-        state["status"] = "in-progress"
-        state["resumed_at"] = resumed_time
-        state["previous_blocker"] = blocker
-        # Remove blocked fields
-        state.pop("blocker", None)
-        state.pop("blocked_at", None)
-        with open(state_file, "w") as f:
-            json.dump(state, f, indent=2)
-
-    summary = {
-        "sprint_num": sprint_num,
-        "title": title,
-        "status": "resumed",
-        "previous_blocker": blocker,
-        "hours_before_block": hours_before,
-        "new_path": str(new_path),
-    }
-
-    print(f"\n{'='*60}")
-    print(f"Sprint {sprint_num}: {title} - RESUMED")
-    print(f"{'='*60}")
-    print(f"Previously blocked by: {blocker}")
-    print(f"Hours before block: {hours_before if hours_before else 'N/A'}")
-    print(f"File: {new_path.name}")
-    print(f"Use /sprint-next {sprint_num} to continue")
-    print(f"{'='*60}")
-
-    return summary
-
-
-def recover_sprint(sprint_num: int, dry_run: bool = False) -> dict:
-    """
-    Recover a sprint file that ended up in the wrong location.
-
-    Args:
-        sprint_num: Sprint number to recover
-        dry_run: If True, preview changes without executing
-
-    Returns:
-        Dict with recovery summary
-
-    Raises:
-        FileOperationError: If sprint file not found
-        ValidationError: If sprint is already in correct location
-
-    Example:
-        >>> summary = recover_sprint(4)
-        >>> print(summary['new_path'])
-    """
-    project_root = find_project_root()
-    sprint_file = find_sprint_file(sprint_num, project_root)
-
-    if not sprint_file:
-        raise FileOperationError(f"Sprint {sprint_num} not found")
-
-    # Determine correct location
-    is_epic, epic_num = is_epic_sprint(sprint_file)
-    has_done_suffix = "--done" in sprint_file.name
-
-    # Determine expected location
-    if not has_done_suffix:
-        raise ValidationError(
-            f"Sprint {sprint_num} is not complete (no --done suffix). Nothing to recover."
-        )
-
-    if is_epic:
-        # Epic sprint - should be in epic folder (either in-progress or done depending on epic status)
-        expected_parent = sprint_file.parent
-        if not expected_parent.name.startswith("epic-"):
-            expected_parent = expected_parent.parent
-
-        # Check if we need to move
-        if "3-done" in str(sprint_file) and "2-in-progress" in str(expected_parent):
-            # Epic sprint in wrong location
-            correct_path = expected_parent / sprint_file.name
-        else:
-            raise ValidationError(f"Sprint {sprint_num} is already in correct location")
-    else:
-        # Standalone sprint - should be in 3-done
-        correct_folder = project_root / "docs" / "sprints" / "3-done"
-        correct_path = correct_folder / sprint_file.name
-
-        if sprint_file.parent == correct_folder:
-            raise ValidationError(f"Sprint {sprint_num} is already in correct location")
-
-    if dry_run:
-        print(f"[DRY RUN] Would recover sprint {sprint_num}:")
-        print(f"  From: {sprint_file}")
-        print(f"  To: {correct_path}")
-        return {"status": "dry-run", "sprint_num": sprint_num}
-
-    # Move file
-    correct_path.parent.mkdir(parents=True, exist_ok=True)
-    sprint_file.rename(correct_path)
-
-    # Update state file if exists
-    state_file = project_root / ".claude" / f"sprint-{sprint_num}-state.json"
-    if state_file.exists():
-        with open(state_file) as f:
-            state = json.load(f)
-        state["sprint_file"] = str(correct_path)
-        with open(state_file, "w") as f:
-            json.dump(state, f, indent=2)
-
-    summary = {
-        "sprint_num": sprint_num,
-        "old_path": str(sprint_file),
-        "new_path": str(correct_path),
-    }
-
-    print(f"\n{'='*60}")
-    print(f"Sprint {sprint_num} - RECOVERED")
-    print(f"{'='*60}")
-    print(f"From: {sprint_file}")
-    print(f"To: {correct_path}")
-    print(f"{'='*60}")
-
-    return summary
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # Sprint commands
+    p = sub.add_parser("create-sprint", help="Create a new sprint")
+    p.add_argument("num", type=int)
+    p.add_argument("title")
+    p.add_argument("--type", default="fullstack", choices=SPRINT_TYPES)
+    p.add_argument("--epic", type=int, default=None)
+    p.set_defaults(func=cmd_create_sprint)
+
+    p = sub.add_parser("start-sprint", help="Start a sprint")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_start_sprint)
+
+    p = sub.add_parser("complete-sprint", help="Complete a sprint")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_complete_sprint)
+
+    p = sub.add_parser("review-sprint", help="Move a sprint to review")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_review_sprint)
+
+    p = sub.add_parser("reject-sprint", help="Reject a sprint from review")
+    p.add_argument("num", type=int)
+    p.add_argument("reason")
+    p.set_defaults(func=cmd_reject_sprint)
+
+    p = sub.add_parser("block-sprint", help="Block a sprint")
+    p.add_argument("num", type=int)
+    p.add_argument("reason")
+    p.set_defaults(func=cmd_block_sprint)
+
+    p = sub.add_parser("resume-sprint", help="Resume a blocked sprint")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_resume_sprint)
+
+    p = sub.add_parser("abort-sprint", help="Abort a sprint")
+    p.add_argument("num", type=int)
+    p.add_argument("reason", nargs="?", default=None)
+    p.set_defaults(func=cmd_abort_sprint)
+
+    # Epic commands
+    p = sub.add_parser("create-epic", help="Create a new epic")
+    p.add_argument("num", type=int)
+    p.add_argument("title")
+    p.set_defaults(func=cmd_create_epic)
+
+    p = sub.add_parser("start-epic", help="Start an epic")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_start_epic)
+
+    p = sub.add_parser("complete-epic", help="Complete an epic")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_complete_epic)
+
+    p = sub.add_parser("archive-epic", help="Archive a completed epic")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_archive_epic)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
