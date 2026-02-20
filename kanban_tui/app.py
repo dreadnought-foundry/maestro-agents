@@ -581,7 +581,7 @@ class KanbanApp(App):
 
         def _on_move_result(result: str | None) -> None:
             if result:
-                self.call_later(self.action_refresh)
+                self.run_worker(self.action_refresh())
 
         self.push_screen(MoveScreen(card, current_col, self.columns, self.kanban_dir), callback=_on_move_result)
 
@@ -725,8 +725,8 @@ class KanbanApp(App):
                 else:
                     shutil.move(str(src), str(target / src.name))
 
-            self.call_later(self.action_refresh)
             self.notify(f"S-{sprint.number:02d} rejected: {reason}", severity="warning")
+            self.run_worker(self.action_refresh())
 
         self.push_screen(RejectModal(sprint.number), callback=_on_reject_result)
 
