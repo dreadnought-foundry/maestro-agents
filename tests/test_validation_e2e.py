@@ -17,7 +17,7 @@ from src.agents.execution.mocks import (
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
 from src.execution.config import RunConfig
-from src.execution.convenience import create_default_registry, create_hook_registry
+from src.execution.convenience import create_test_registry, create_hook_registry
 from src.execution.gates import CoverageGate, QualityReviewGate, create_default_hooks
 from src.execution.hooks import HookRegistry
 from src.execution.runner import RunResult, SprintRunner
@@ -260,13 +260,13 @@ async def test_deferred_items_collected_across_mixed_agents():
 
 
 # ---------------------------------------------------------------------------
-# 7. create_default_registry agents handle all standard step types
+# 7. create_test_registry agents handle all standard step types
 # ---------------------------------------------------------------------------
 
 async def test_default_registry_handles_all_standard_step_types():
-    """create_default_registry() registers agents for implement, write_code,
+    """create_test_registry() registers agents for implement, write_code,
     test, run_tests, review, and quality_review step types."""
-    registry = create_default_registry()
+    registry = create_test_registry()
 
     standard_types = ["implement", "write_code", "test", "run_tests", "review", "quality_review"]
     for step_type in standard_types:

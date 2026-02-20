@@ -11,7 +11,7 @@ from src.agents.execution.mocks import (
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
 from src.execution.convenience import (
-    create_default_registry,
+    create_test_registry,
     create_hook_registry,
     run_sprint,
 )
@@ -59,7 +59,7 @@ async def test_full_lifecycle_create_to_completion():
     """Create epic -> create sprint with tasks -> run -> verify DONE, all steps completed."""
     backend = InMemoryAdapter(project_name="e2e-project")
     epic, sprint = await _setup_sprint(backend)
-    registry = create_default_registry()
+    registry = create_test_registry()
 
     runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result = await runner.run(sprint.id)
@@ -120,7 +120,7 @@ async def test_dependency_enforcement():
     assert sprint_a.id in exc_info.value.unmet_dependencies
 
     # Complete sprint A
-    registry = create_default_registry()
+    registry = create_test_registry()
     runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result_a = await runner.run(sprint_a.id)
     assert result_a.success is True
@@ -232,9 +232,9 @@ async def test_deferred_items_flow_through():
     assert "TODO: add logging" in result.deferred_items
 
 
-async def test_create_default_registry_has_common_types():
-    """create_default_registry has implement, test, review agents."""
-    registry = create_default_registry()
+async def test_create_test_registry_has_common_types():
+    """create_test_registry has implement, test, review agents."""
+    registry = create_test_registry()
     agents = registry.list_agents()
 
     assert "implement" in agents
@@ -250,7 +250,7 @@ async def test_run_sprint_convenience_function():
     backend = InMemoryAdapter()
     epic, sprint = await _setup_sprint(backend)
 
-    result = await run_sprint(sprint.id, backend=backend)
+    result = await run_sprint(sprint.id, backend=backend, mock=True)
 
     assert result.success is True
     assert result.steps_completed == 3
