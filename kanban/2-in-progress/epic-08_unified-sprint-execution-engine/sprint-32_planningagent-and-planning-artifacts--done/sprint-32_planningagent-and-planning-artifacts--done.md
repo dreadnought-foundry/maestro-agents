@@ -3,11 +3,11 @@ sprint: 32
 title: "PlanningAgent and Planning Artifacts"
 type: backend
 epic: 8
-status: planning
+status: done
 created: 2026-02-20T19:59:05Z
-started: null
-completed: null
-hours: null
+started: 2026-02-20T20:39:26Z
+completed: 2026-02-20T21:24:28Z
+hours: 0.8
 ---
 
 # Sprint 32: PlanningAgent & Planning Artifacts

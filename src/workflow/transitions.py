@@ -6,7 +6,10 @@ from .models import SprintStatus
 VALID_TRANSITIONS: frozenset[tuple[SprintStatus, SprintStatus]] = frozenset(
     {
         (SprintStatus.TODO, SprintStatus.IN_PROGRESS),       # start
-        (SprintStatus.IN_PROGRESS, SprintStatus.DONE),       # complete
+        (SprintStatus.IN_PROGRESS, SprintStatus.REVIEW),     # submit for review
+        (SprintStatus.IN_PROGRESS, SprintStatus.DONE),       # complete (direct)
+        (SprintStatus.REVIEW, SprintStatus.DONE),             # approve from review
+        (SprintStatus.REVIEW, SprintStatus.IN_PROGRESS),     # reject from review
         (SprintStatus.IN_PROGRESS, SprintStatus.BLOCKED),    # block
         (SprintStatus.BLOCKED, SprintStatus.IN_PROGRESS),    # resume
         (SprintStatus.BACKLOG, SprintStatus.TODO),            # schedule

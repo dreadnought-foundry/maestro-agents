@@ -11,6 +11,8 @@ Commands:
     create-sprint <num> <title> [--type TYPE] [--epic NUM]
     start-sprint <num>
     complete-sprint <num>
+    review-sprint <num>
+    reject-sprint <num> <reason>
     block-sprint <num> <reason>
     resume-sprint <num>
     abort-sprint <num> [reason]
@@ -36,8 +38,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 COLUMNS = [
-    "0-backlog", "1-todo", "2-in-progress", "3-done",
-    "4-blocked", "5-abandoned", "6-archived",
+    "0-backlog", "1-todo", "2-in-progress", "3-review",
+    "4-done", "5-blocked", "6-abandoned", "7-archived",
 ]
 
 SPRINT_TYPES = [
@@ -126,11 +128,13 @@ def sprint_status(path: Path) -> str:
     col = sprint_column(path)
     if col == "2-in-progress":
         return "in-progress"
-    if col == "3-done":
+    if col == "3-review":
+        return "review"
+    if col == "4-done":
         return "done"
-    if col == "5-abandoned":
+    if col == "6-abandoned":
         return "aborted"
-    if col == "6-archived":
+    if col == "7-archived":
         return "archived"
     return "planning"
 
@@ -430,8 +434,8 @@ def cmd_complete_sprint(args) -> None:
         sys.exit(f"Error: Sprint {num} is aborted — cannot complete")
     if status == "blocked":
         sys.exit(f"Error: Sprint {num} is blocked. Use resume-sprint first.")
-    if status == "planning":
-        sys.exit(f"Error: Sprint {num} hasn't been started yet")
+    if status not in ("in-progress", "review"):
+        sys.exit(f"Error: Sprint {num} is not in progress or review (status: {status})")
 
     yaml = read_yaml(path)
     title = yaml.get("title", f"Sprint {num}")
@@ -451,7 +455,7 @@ def cmd_complete_sprint(args) -> None:
 
     nested, _ = is_nested_in_epic(path)
     if not nested:
-        path = move_to_column(path, "3-done")
+        path = move_to_column(path, "4-done")
 
     update_state(num, status="done", completed_at=now_iso())
 
@@ -459,6 +463,68 @@ def cmd_complete_sprint(args) -> None:
     print(f"  File: {path.relative_to(project_root())}")
     if hours:
         print(f"  Hours: {hours}")
+
+
+def cmd_review_sprint(args) -> None:
+    num = args.num
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status == "review":
+        sys.exit(f"Error: Sprint {num} is already in review")
+    if status == "done":
+        sys.exit(f"Error: Sprint {num} is already done")
+    if status == "aborted":
+        sys.exit(f"Error: Sprint {num} is aborted — cannot review")
+    if status == "blocked":
+        sys.exit(f"Error: Sprint {num} is blocked. Use resume-sprint first.")
+    if status == "planning":
+        sys.exit(f"Error: Sprint {num} hasn't been started yet")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="review")
+
+    col = sprint_column(path)
+    if col != "3-review":
+        path = move_to_column(path, "3-review")
+
+    update_state(num, status="review")
+
+    print(f"Sprint {num}: {title} — IN REVIEW")
+    print(f"  File: {path.relative_to(project_root())}")
+    print(f"  Complete: python3 scripts/sprint_lifecycle.py complete-sprint {num}")
+    print(f"  Reject:   python3 scripts/sprint_lifecycle.py reject-sprint {num} \"reason\"")
+
+
+def cmd_reject_sprint(args) -> None:
+    num, reason = args.num, args.reason
+    path = find_sprint(num)
+    if not path:
+        sys.exit(f"Error: Sprint {num} not found")
+
+    status = sprint_status(path)
+    if status != "review":
+        sys.exit(f"Error: Sprint {num} is not in review (status: {status})")
+
+    yaml = read_yaml(path)
+    title = yaml.get("title", f"Sprint {num}")
+
+    update_yaml(path, status="in-progress", rejection_reason=reason, rejected_at=now_iso())
+
+    col = sprint_column(path)
+    if col != "2-in-progress":
+        path = move_to_column(path, "2-in-progress")
+
+    update_state(num, status="in_progress", rejection_reason=reason, rejected_at=now_iso())
+
+    print(f"Sprint {num}: {title} — REJECTED")
+    print(f"  Reason: {reason}")
+    print(f"  File: {path.relative_to(project_root())}")
+    print(f"  Sprint moved back to In Progress for rework.")
 
 
 def cmd_block_sprint(args) -> None:
@@ -644,8 +710,8 @@ def cmd_complete_epic(args) -> None:
 
     update_yaml(epic_file, status="done", completed=now_iso())
 
-    # Move to 3-done
-    target = kanban_root() / "3-done"
+    # Move to 4-done
+    target = kanban_root() / "4-done"
     target.mkdir(parents=True, exist_ok=True)
     new_dir = target / epic_dir.name
     shutil.move(str(epic_dir), str(new_dir))
@@ -667,7 +733,7 @@ def cmd_archive_epic(args) -> None:
     if epic_file.exists():
         update_yaml(epic_file, status="archived", archived_at=now_iso())
 
-    target = kanban_root() / "6-archived"
+    target = kanban_root() / "7-archived"
     target.mkdir(parents=True, exist_ok=True)
     new_dir = target / epic_dir.name
     shutil.move(str(epic_dir), str(new_dir))
@@ -702,6 +768,15 @@ def main() -> None:
     p = sub.add_parser("complete-sprint", help="Complete a sprint")
     p.add_argument("num", type=int)
     p.set_defaults(func=cmd_complete_sprint)
+
+    p = sub.add_parser("review-sprint", help="Move a sprint to review")
+    p.add_argument("num", type=int)
+    p.set_defaults(func=cmd_review_sprint)
+
+    p = sub.add_parser("reject-sprint", help="Reject a sprint from review")
+    p.add_argument("num", type=int)
+    p.add_argument("reason")
+    p.set_defaults(func=cmd_reject_sprint)
 
     p = sub.add_parser("block-sprint", help="Block a sprint")
     p.add_argument("num", type=int)

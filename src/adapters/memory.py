@@ -184,6 +184,7 @@ class InMemoryAdapter:
 
     async def complete_sprint(self, sprint_id: str) -> Sprint:
         sprint = await self.get_sprint(sprint_id)
+        previous_status = sprint.status
         validate_transition(sprint_id, sprint.status, SprintStatus.DONE)
 
         # Verify all steps are done or skipped
@@ -196,7 +197,7 @@ class InMemoryAdapter:
         sprint.status = SprintStatus.DONE
         sprint.transitions.append(
             SprintTransition(
-                from_status=SprintStatus.IN_PROGRESS,
+                from_status=previous_status,
                 to_status=SprintStatus.DONE,
                 timestamp=datetime.now(),
             )
@@ -216,6 +217,40 @@ class InMemoryAdapter:
                 reason=reason,
             )
         )
+        return sprint
+
+    async def move_to_review(self, sprint_id: str) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.REVIEW)
+
+        sprint.status = SprintStatus.REVIEW
+        sprint.transitions.append(
+            SprintTransition(
+                from_status=SprintStatus.IN_PROGRESS,
+                to_status=SprintStatus.REVIEW,
+                timestamp=datetime.now(),
+            )
+        )
+        return sprint
+
+    async def reject_sprint(self, sprint_id: str, reason: str) -> Sprint:
+        sprint = await self.get_sprint(sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.IN_PROGRESS)
+
+        sprint.status = SprintStatus.IN_PROGRESS
+        sprint.transitions.append(
+            SprintTransition(
+                from_status=SprintStatus.REVIEW,
+                to_status=SprintStatus.IN_PROGRESS,
+                timestamp=datetime.now(),
+                reason=reason,
+            )
+        )
+        sprint.metadata["rejection_reason"] = reason
+        sprint.metadata.setdefault("rejection_history", []).append({
+            "reason": reason,
+            "timestamp": datetime.now().isoformat(),
+        })
         return sprint
 
     async def get_step_status(self, sprint_id: str) -> dict:

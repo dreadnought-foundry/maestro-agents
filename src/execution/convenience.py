@@ -15,12 +15,14 @@ from src.execution.runner import RunResult, SprintRunner
 def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry:
     """Create an AgentRegistry with real agents backed by ClaudeCodeExecutor."""
     from src.agents.execution.claude_code import ClaudeCodeExecutor
+    from src.agents.execution.planning_agent import PlanningAgent
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
     from src.agents.execution.test_runner import TestRunnerAgent
 
     executor = ClaudeCodeExecutor(model=model, max_turns=max_turns)
     registry = AgentRegistry()
+    registry.register("planning", PlanningAgent(executor=executor))
     registry.register("implement", ProductEngineerAgent(executor=executor))
     registry.register("write_code", ProductEngineerAgent(executor=executor))
     registry.register("test", TestRunnerAgent(executor=executor))
@@ -33,12 +35,14 @@ def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry
 def create_test_registry() -> AgentRegistry:
     """Create an AgentRegistry with mock agents for fast testing."""
     from src.agents.execution.mocks import (
+        MockPlanningAgent,
         MockProductEngineerAgent,
         MockQualityEngineerAgent,
         MockTestRunnerAgent,
     )
 
     registry = AgentRegistry()
+    registry.register("planning", MockPlanningAgent())
     registry.register("implement", MockProductEngineerAgent())
     registry.register("write_code", MockProductEngineerAgent())
     registry.register("test", MockTestRunnerAgent())

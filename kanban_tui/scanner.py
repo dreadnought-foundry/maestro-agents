@@ -97,68 +97,156 @@ COLUMN_ORDER = [
     "0-backlog",
     "1-todo",
     "2-in-progress",
-    "3-done",
-    "4-blocked",
-    "5-abandoned",
-    "6-archived",
+    "3-review",
+    "4-done",
+    "5-blocked",
+    "6-abandoned",
+    "7-archived",
 ]
 
 COLUMN_DISPLAY = {
     "0-backlog": "Backlog",
     "1-todo": "Todo",
     "2-in-progress": "In Progress",
-    "3-done": "Done",
-    "4-blocked": "Blocked",
-    "5-abandoned": "Abandoned",
-    "6-archived": "Archived",
+    "3-review": "Review",
+    "4-done": "Done",
+    "5-blocked": "Blocked",
+    "6-abandoned": "Abandoned",
+    "7-archived": "Archived",
+}
+
+# Maps sprint status values to display column names
+STATUS_TO_COLUMN: dict[str, str] = {
+    "planning": "1-todo",
+    "todo": "1-todo",
+    "in-progress": "2-in-progress",
+    "review": "3-review",
+    "done": "4-done",
+    "blocked": "5-blocked",
+    "aborted": "6-abandoned",
+    "abandoned": "6-abandoned",
+    "archived": "7-archived",
 }
 
 
+def _status_from_name(name: str) -> str | None:
+    """Detect explicit status from --done or --blocked suffix in a path name."""
+    if "--done" in name:
+        return "done"
+    if "--blocked" in name:
+        return "blocked"
+    return None
+
+
+def _sprint_display_column(sprint: SprintInfo, physical_col: str) -> str:
+    """Determine which display column a sprint should appear in.
+
+    Priority:
+    1. --done / --blocked suffix on the movable path (explicit filesystem signal)
+    2. YAML status field
+    3. Physical column (fallback)
+    """
+    suffix_status = _status_from_name(sprint.movable_path.name)
+    if suffix_status:
+        return STATUS_TO_COLUMN.get(suffix_status, physical_col)
+    col = STATUS_TO_COLUMN.get(sprint.status)
+    if col:
+        return col
+    return physical_col
+
+
 def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
-    """Scan the kanban directory and return structured column data."""
-    columns: list[ColumnInfo] = []
+    """Scan the kanban directory and return structured column data.
+
+    Sprints are placed in columns based on their actual status (YAML frontmatter
+    and path suffixes), not their filesystem location. An epic whose sprints have
+    different statuses will appear in multiple columns, each showing only the
+    sprints belonging to that status.
+    """
+    # Initialize column infos for every existing column directory
+    columns: dict[str, ColumnInfo] = {}
+    for col_name in COLUMN_ORDER:
+        col_path = kanban_dir / col_name
+        if col_path.is_dir():
+            columns[col_name] = ColumnInfo(
+                name=col_name,
+                display_name=COLUMN_DISPLAY.get(col_name, col_name),
+                path=col_path,
+            )
+
+    # First pass: collect all epics (with all their sprints) and standalone sprints,
+    # recording the physical column each item was found in for fallback purposes.
+    all_epics: dict[int, tuple[EpicInfo, str]] = {}  # epic_number -> (EpicInfo, physical_col)
+    all_standalone: list[tuple[SprintInfo, str]] = []  # (sprint, physical_col)
 
     for col_name in COLUMN_ORDER:
         col_path = kanban_dir / col_name
         if not col_path.is_dir():
             continue
 
-        column = ColumnInfo(
-            name=col_name,
-            display_name=COLUMN_DISPLAY.get(col_name, col_name),
-            path=col_path,
-        )
-
         for entry in sorted(col_path.iterdir()):
             if entry.name.startswith("."):
                 continue
 
-            # Epic directory
             if entry.is_dir() and entry.name.startswith("epic-"):
                 epic = _scan_epic(entry)
-                if epic:
-                    column.epics.append(epic)
+                if epic and epic.number not in all_epics:
+                    all_epics[epic.number] = (epic, col_name)
 
-            # Standalone sprint directory
             elif entry.is_dir() and entry.name.startswith("sprint-"):
                 md_files = list(entry.glob("*.md"))
                 if md_files:
                     sprint = _parse_sprint_md(md_files[0], movable_path=entry, is_folder=True)
                     if sprint:
-                        column.standalone_sprints.append(sprint)
+                        all_standalone.append((sprint, col_name))
 
-            # Standalone sprint flat file
             elif entry.is_file() and entry.name.startswith("sprint-") and entry.suffix == ".md":
                 sprint = _parse_sprint_md(entry, movable_path=entry, is_folder=False)
                 if sprint:
-                    column.standalone_sprints.append(sprint)
+                    all_standalone.append((sprint, col_name))
 
-        # Sort epics and sprints by number
-        column.epics.sort(key=lambda e: e.number)
-        column.standalone_sprints.sort(key=lambda s: s.number)
-        columns.append(column)
+    # Second pass: distribute each epic's sprints into their target display columns.
+    # The same epic may appear in multiple columns with different sprint subsets.
+    for epic_number in sorted(all_epics):
+        epic, physical_col = all_epics[epic_number]
 
-    return columns
+        sprints_by_col: dict[str, list[SprintInfo]] = {}
+        for sprint in epic.sprints:
+            target_col = _sprint_display_column(sprint, physical_col)
+            if target_col not in columns:
+                target_col = physical_col  # fallback if column doesn't exist on disk
+            sprints_by_col.setdefault(target_col, []).append(sprint)
+
+        for target_col, sprints in sprints_by_col.items():
+            if target_col in columns:
+                col_epic = EpicInfo(
+                    number=epic.number,
+                    title=epic.title,
+                    status=epic.status,
+                    path=epic.path,
+                    sprints=sorted(sprints, key=lambda s: s.number),
+                    raw_frontmatter=epic.raw_frontmatter,
+                )
+                columns[target_col].epics.append(col_epic)
+
+    # Distribute standalone sprints into their target display columns.
+    for sprint, physical_col in all_standalone:
+        target_col = _sprint_display_column(sprint, physical_col)
+        if target_col not in columns:
+            target_col = physical_col
+        if target_col in columns:
+            columns[target_col].standalone_sprints.append(sprint)
+
+    # Sort and return columns in canonical order
+    result = []
+    for col_name in COLUMN_ORDER:
+        if col_name in columns:
+            col = columns[col_name]
+            col.epics.sort(key=lambda e: e.number)
+            col.standalone_sprints.sort(key=lambda s: s.number)
+            result.append(col)
+
+    return result
 
 
 def _scan_epic(epic_dir: Path) -> EpicInfo | None:

@@ -3,11 +3,11 @@ sprint: 30
 title: "Review Column and Rejection Flow"
 type: infrastructure
 epic: 8
-status: planning
+status: done
 created: 2026-02-20T19:59:05Z
-started: null
-completed: null
-hours: null
+started: 2026-02-20T20:20:45Z
+completed: 2026-02-20T20:39:05Z
+hours: 0.3
 ---
 
 # Sprint 30: Review Column & Rejection Flow
@@ -71,42 +71,42 @@ User presses [x] on a sprint in Review column
 ## Tasks
 
 ### Phase 1: Planning
-- [ ] Audit all code referencing column names/numbers (kanban_tui/, src/kanban/, sprint_lifecycle.py)
-- [ ] Design rejection state model (YAML fields, state file fields)
-- [ ] Design how rejection feedback flows into agent context
-- [ ] Design TUI action bindings for Review column
+- [x] Audit all code referencing column names/numbers (kanban_tui/, src/kanban/, sprint_lifecycle.py)
+- [x] Design rejection state model (YAML fields, state file fields)
+- [x] Design how rejection feedback flows into agent context
+- [x] Design TUI action bindings for Review column
 
 ### Phase 2: Implementation — Column & Backend
-- [ ] Rename kanban columns on disk: `3-done` → `4-done`, `4-blocked` → `5-blocked`, `5-abandoned` → `6-abandoned`, `6-archived` → `7-archived`
-- [ ] Create `3-review` column directory
-- [ ] Update `KanbanAdapter` column constants and mapping
-- [ ] Update `src/kanban/scanner.py` for new column structure
-- [ ] Add `REVIEW` to `SprintStatus` enum in workflow models
-- [ ] Add `move_to_review()` method on KanbanAdapter
-- [ ] Add `reject_sprint(sprint_id, reason)` method on KanbanAdapter and InMemoryAdapter
-- [ ] Implement rejection: moves from review to in-progress, stores feedback
-- [ ] Update SprintRunner: after successful validation, call `move_to_review()` instead of `complete_sprint()`
-- [ ] Generate draft quality report when entering Review
+- [x] Rename kanban columns on disk: `3-done` → `4-done`, `4-blocked` → `5-blocked`, `5-abandoned` → `6-abandoned`, `6-archived` → `7-archived`
+- [x] Create `3-review` column directory
+- [x] Update `KanbanAdapter` column constants and mapping
+- [x] Update `src/kanban/scanner.py` for new column structure
+- [x] Add `REVIEW` to `SprintStatus` enum in workflow models
+- [x] Add `move_to_review()` method on KanbanAdapter
+- [x] Add `reject_sprint(sprint_id, reason)` method on KanbanAdapter and InMemoryAdapter
+- [x] Implement rejection: moves from review to in-progress, stores feedback
+- [x] Update SprintRunner: after successful validation, call `move_to_review()` instead of `complete_sprint()`
+- [x] Generate draft quality report when entering Review
 
 ### Phase 3: Implementation — TUI Actions
-- [ ] Update `kanban_tui/scanner.py` column definitions for new structure
-- [ ] Add `c` key binding: Complete — only active when selected card is in Review column
-- [ ] Add `x` key binding: Reject — only active when selected card is in Review column
-- [ ] Create `RejectModal` screen — text input for rejection reason
-- [ ] Complete action: calls KanbanAdapter.complete_sprint() + ArtifactGenerator
-- [ ] Reject action: calls KanbanAdapter.reject_sprint() with reason from modal
-- [ ] Show Review column in default view (alongside todo, in-progress, done)
-- [ ] Detail panel (`d`) shows draft quality report for Review cards
-- [ ] Refresh board after complete/reject actions
+- [x] Update `kanban_tui/scanner.py` column definitions for new structure
+- [x] Add `c` key binding: Complete — only active when selected card is in Review column
+- [x] Add `x` key binding: Reject — only active when selected card is in Review column
+- [x] Create `RejectModal` screen — text input for rejection reason
+- [x] Complete action: calls KanbanAdapter.complete_sprint() + ArtifactGenerator
+- [x] Reject action: calls KanbanAdapter.reject_sprint() with reason from modal
+- [x] Show Review column in default view (alongside todo, in-progress, done)
+- [x] Detail panel (`d`) shows draft quality report for Review cards
+- [x] Refresh board after complete/reject actions
 
 ### Phase 4: Validation
-- [ ] Test column rename doesn't break existing archived sprints
-- [ ] Test review → complete flow (from TUI action)
-- [ ] Test review → reject → re-execute → review flow
-- [ ] Test rejection feedback appears in agent StepContext
-- [ ] Kanban TUI displays Review column correctly
-- [ ] TUI actions only appear for sprints in Review column
-- [ ] `/sprint-complete` and `/sprint-reject` CLI skills still work as fallback
+- [x] Test column rename doesn't break existing archived sprints
+- [x] Test review → complete flow (from TUI action)
+- [x] Test review → reject → re-execute → review flow
+- [x] Test rejection feedback appears in agent StepContext
+- [x] Kanban TUI displays Review column correctly
+- [x] TUI actions only appear for sprints in Review column
+- [x] `/sprint-complete` and `/sprint-reject` CLI skills still work as fallback
 
 ## Deliverables
 

@@ -12,7 +12,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Header, OptionList, Static
+from textual.widgets import Footer, Header, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from kanban_tui.scanner import (
@@ -36,6 +36,15 @@ class CardSelected(Message):
         super().__init__()
         self.markdown_content = markdown_content
         self.title = title
+
+
+class EpicExpandToggled(Message):
+    """Fired when an epic is expanded or collapsed so all columns can sync."""
+
+    def __init__(self, epic_number: int, expanded: bool) -> None:
+        super().__init__()
+        self.epic_number = epic_number
+        self.expanded = expanded
 
 
 class SprintCard(Static):
@@ -87,7 +96,9 @@ class EpicCard(Static):
             )
 
     def toggle_expanded(self) -> None:
-        self.expanded = not self.expanded
+        new_val = not self.expanded
+        self.expanded = new_val
+        self.post_message(EpicExpandToggled(self.epic.number, new_val))
 
     def watch_expanded(self, value: bool) -> None:
         # Show/hide nested sprints
@@ -232,7 +243,40 @@ class MoveScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
-MAIN_COLUMNS = {"1-todo", "2-in-progress", "3-done"}
+class RejectModal(ModalScreen[str | None]):
+    CSS = """
+    RejectModal { align: center middle; }
+    #reject-dialog {
+        width: 50; height: auto; max-height: 12;
+        border: solid $error; background: $surface; padding: 1 2;
+    }
+    #reject-title { text-align: center; padding-bottom: 1; }
+    #reject-input { width: 100%; }
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, sprint_number: int) -> None:
+        super().__init__()
+        self.sprint_number = sprint_number
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="reject-dialog"):
+            yield Static(f"[bold red]Reject S-{self.sprint_number:02d}[/]", id="reject-title")
+            yield Static("Rejection reason:")
+            yield Input(placeholder="Why is this being rejected?", id="reject-input")
+
+    @on(Input.Submitted, "#reject-input")
+    def _on_submit(self, event: Input.Submitted) -> None:
+        reason = event.value.strip()
+        if reason:
+            self.dismiss(reason)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+MAIN_COLUMNS = {"1-todo", "2-in-progress", "3-review", "4-done"}
 
 
 class KanbanApp(App):
@@ -333,6 +377,8 @@ class KanbanApp(App):
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("m", "move_card", "Move"),
+        Binding("c", "complete_review", "Complete"),
+        Binding("x", "reject_review", "Reject"),
         Binding("d", "toggle_detail", "Detail"),
         Binding("a", "toggle_all_cols", "All Cols"),
         Binding("left", "col_left", "< Col", show=True),
@@ -376,6 +422,13 @@ class KanbanApp(App):
         panel = self.query_one("#detail-panel", DetailPanel)
         panel.title_text = event.title
         panel.content_text = event.markdown_content
+
+    @on(EpicExpandToggled)
+    def _on_epic_expand_toggled(self, event: EpicExpandToggled) -> None:
+        """Sync expand/collapse state across all columns for the same epic."""
+        for card in self.query(EpicCard):
+            if card.epic.number == event.epic_number and card.expanded != event.expanded:
+                card.expanded = event.expanded
 
     # -- Column visibility --
 
@@ -530,6 +583,86 @@ class KanbanApp(App):
                 self.call_later(self.action_refresh)
 
         self.push_screen(MoveScreen(card, current_col, self.columns, self.kanban_dir), callback=_on_move_result)
+
+    # -- Review actions (complete / reject) --
+
+    def _is_in_review_column(self) -> bool:
+        """Check if the focused card is in the review column."""
+        card, col = self._get_focused_card_info()
+        return card is not None and col == "3-review"
+
+    def action_complete_review(self) -> None:
+        if not self._is_in_review_column():
+            self.notify("Complete is only available for cards in the Review column", severity="warning")
+            return
+        card, _ = self._get_focused_card_info()
+        if not isinstance(card, SprintCard):
+            self.notify("Select a sprint card to complete", severity="warning")
+            return
+
+        sprint = card.sprint
+        src = sprint.movable_path
+        parent = src.parent
+
+        # Move sprint (or its epic) from 3-review to 4-done, add --done suffix
+        if parent.name.startswith("epic-"):
+            # Inside an epic — add --done suffix, don't move epic
+            self._add_done_suffix(src)
+        else:
+            # Standalone sprint — add suffix and move to 4-done
+            self._add_done_suffix(src)
+            target = self.kanban_dir / "4-done"
+            target.mkdir(parents=True, exist_ok=True)
+            new_src = src.parent / (src.name.replace(src.stem, src.stem + "--done")) if src.is_file() else src
+            # Re-locate after suffix
+            done_name = src.name + "--done" if src.is_dir() else src.name
+            done_path = src.parent / done_name if src.is_dir() else src
+            if done_path.exists():
+                shutil.move(str(done_path), str(target / done_path.name))
+
+        self.call_later(self.action_refresh)
+        self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+
+    def _add_done_suffix(self, path: Path) -> None:
+        """Add --done suffix to a sprint dir/file."""
+        if path.is_dir() and "--done" not in path.name:
+            new_name = path.name + "--done"
+            path.rename(path.parent / new_name)
+            # Also rename the main .md inside
+            for md in (path.parent / new_name).glob("*.md"):
+                if "--done" not in md.name and not md.name.startswith("_"):
+                    md.rename(md.parent / (md.stem + "--done" + md.suffix))
+                    break
+
+    def action_reject_review(self) -> None:
+        if not self._is_in_review_column():
+            self.notify("Reject is only available for cards in the Review column", severity="warning")
+            return
+        card, _ = self._get_focused_card_info()
+        if not isinstance(card, SprintCard):
+            self.notify("Select a sprint card to reject", severity="warning")
+            return
+
+        sprint = card.sprint
+
+        def _on_reject_result(reason: str | None) -> None:
+            if reason is None:
+                return
+            src = sprint.movable_path
+            parent = src.parent
+            target = self.kanban_dir / "2-in-progress"
+            target.mkdir(parents=True, exist_ok=True)
+
+            if parent.name.startswith("epic-"):
+                # Inside epic — move entire epic back to in-progress
+                shutil.move(str(parent), str(target / parent.name))
+            else:
+                shutil.move(str(src), str(target / src.name))
+
+            self.call_later(self.action_refresh)
+            self.notify(f"S-{sprint.number:02d} rejected: {reason}", severity="warning")
+
+        self.push_screen(RejectModal(sprint.number), callback=_on_reject_result)
 
     # -- Expand/collapse --
 

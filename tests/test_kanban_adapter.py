@@ -16,8 +16,8 @@ from src.workflow.models import SprintStatus, StepStatus
 def kanban_dir(tmp_path):
     """Create a temporary kanban directory structure."""
     for col in [
-        "0-backlog", "1-todo", "2-in-progress", "3-done",
-        "4-blocked", "5-abandoned", "6-archived",
+        "0-backlog", "1-todo", "2-in-progress", "3-review",
+        "4-done", "5-blocked", "6-abandoned", "7-archived",
     ]:
         (tmp_path / "kanban" / col).mkdir(parents=True)
     # Also create .claude dir for state files
@@ -295,6 +295,87 @@ class TestProjectState:
 
 
 # ---------------------------------------------------------------------------
+# move_to_review
+# ---------------------------------------------------------------------------
+class TestMoveToReview:
+    async def test_moves_to_review_when_steps_done(self, adapter):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        result = await adapter.move_to_review(sprint.id)
+        assert result.status is SprintStatus.REVIEW
+
+    async def test_raises_when_steps_not_done(self, adapter):
+        sprint = await _make_sprint(adapter)
+        await adapter.start_sprint(sprint.id)
+        with pytest.raises(ValueError, match="Not all steps are done"):
+            await adapter.move_to_review(sprint.id)
+
+    async def test_raises_for_non_in_progress(self, adapter):
+        sprint = await _make_sprint(adapter)
+        with pytest.raises(InvalidTransitionError):
+            await adapter.move_to_review(sprint.id)
+
+    async def test_moves_to_review_column(self, adapter, kanban_dir):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        await adapter.move_to_review(sprint.id)
+        review_files = list(kanban_dir.glob("3-review/**/sprint-*.md"))
+        assert len(review_files) >= 1
+
+    async def test_records_transition(self, adapter):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        result = await adapter.move_to_review(sprint.id)
+        t = result.transitions[-1]
+        assert t.from_status is SprintStatus.IN_PROGRESS
+        assert t.to_status is SprintStatus.REVIEW
+
+
+# ---------------------------------------------------------------------------
+# reject_sprint
+# ---------------------------------------------------------------------------
+class TestRejectSprint:
+    async def test_rejects_review_sprint(self, adapter):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        await adapter.move_to_review(sprint.id)
+        result = await adapter.reject_sprint(sprint.id, reason="Needs more tests")
+        assert result.status is SprintStatus.IN_PROGRESS
+
+    async def test_stores_rejection_reason(self, adapter, kanban_dir):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        await adapter.move_to_review(sprint.id)
+        await adapter.reject_sprint(sprint.id, reason="Missing edge cases")
+        # Check state file has rejection reason
+        import json
+        state_file = kanban_dir.parent / ".claude" / f"sprint-{sprint.id.split('-')[1]}-state.json"
+        state = json.loads(state_file.read_text())
+        assert state["rejection_reason"] == "Missing edge cases"
+        assert len(state["rejection_history"]) == 1
+
+    async def test_moves_back_to_in_progress(self, adapter, kanban_dir):
+        sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint.id)
+        await adapter.advance_step(sprint.id)
+        await adapter.move_to_review(sprint.id)
+        await adapter.reject_sprint(sprint.id, reason="Fix bugs")
+        in_progress_files = list(kanban_dir.glob("2-in-progress/**/sprint-*.md"))
+        assert len(in_progress_files) >= 1
+
+    async def test_raises_for_non_review_sprint(self, adapter):
+        sprint = await _make_sprint(adapter)
+        await adapter.start_sprint(sprint.id)
+        with pytest.raises(InvalidTransitionError):
+            await adapter.reject_sprint(sprint.id, reason="nope")
+
+
+# ---------------------------------------------------------------------------
 # Full lifecycle
 # ---------------------------------------------------------------------------
 class TestFullLifecycle:
@@ -332,6 +413,34 @@ class TestFullLifecycle:
 
         # Advance and complete
         sprint = await adapter.advance_step(sprint.id)
+        sprint = await adapter.complete_sprint(sprint.id)
+        assert sprint.status is SprintStatus.DONE
+
+    async def test_start_advance_review_complete(self, adapter):
+        """Full flow through review: start → advance → review → complete."""
+        sprint = await _make_sprint(adapter, tasks=[{"name": "Work"}])
+        sprint = await adapter.start_sprint(sprint.id)
+        sprint = await adapter.advance_step(sprint.id)
+        sprint = await adapter.move_to_review(sprint.id)
+        assert sprint.status is SprintStatus.REVIEW
+        sprint = await adapter.complete_sprint(sprint.id)
+        assert sprint.status is SprintStatus.DONE
+
+    async def test_review_reject_rework_review_complete(self, adapter):
+        """Full rejection flow: review → reject → re-review → complete."""
+        sprint = await _make_sprint(adapter, tasks=[{"name": "Code"}])
+        sprint = await adapter.start_sprint(sprint.id)
+        sprint = await adapter.advance_step(sprint.id)
+        sprint = await adapter.move_to_review(sprint.id)
+        assert sprint.status is SprintStatus.REVIEW
+
+        sprint = await adapter.reject_sprint(sprint.id, reason="Needs tests")
+        assert sprint.status is SprintStatus.IN_PROGRESS
+
+        # Re-review (steps already done from before)
+        sprint = await adapter.move_to_review(sprint.id)
+        assert sprint.status is SprintStatus.REVIEW
+
         sprint = await adapter.complete_sprint(sprint.id)
         assert sprint.status is SprintStatus.DONE
 

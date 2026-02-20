@@ -27,26 +27,28 @@ from ..workflow.models import (
 from ..workflow.transitions import validate_transition
 
 COLUMNS = [
-    "0-backlog", "1-todo", "2-in-progress", "3-done",
-    "4-blocked", "5-abandoned", "6-archived",
+    "0-backlog", "1-todo", "2-in-progress", "3-review",
+    "4-done", "5-blocked", "6-abandoned", "7-archived",
 ]
 
 COLUMN_TO_STATUS: dict[str, SprintStatus] = {
     "0-backlog": SprintStatus.BACKLOG,
     "1-todo": SprintStatus.TODO,
     "2-in-progress": SprintStatus.IN_PROGRESS,
-    "3-done": SprintStatus.DONE,
-    "4-blocked": SprintStatus.BLOCKED,
-    "5-abandoned": SprintStatus.ABANDONED,
-    "6-archived": SprintStatus.ARCHIVED,
+    "3-review": SprintStatus.REVIEW,
+    "4-done": SprintStatus.DONE,
+    "5-blocked": SprintStatus.BLOCKED,
+    "6-abandoned": SprintStatus.ABANDONED,
+    "7-archived": SprintStatus.ARCHIVED,
 }
 
 COLUMN_TO_EPIC_STATUS: dict[str, EpicStatus] = {
     "0-backlog": EpicStatus.DRAFT,
     "1-todo": EpicStatus.DRAFT,
     "2-in-progress": EpicStatus.ACTIVE,
-    "3-done": EpicStatus.COMPLETED,
-    "6-archived": EpicStatus.COMPLETED,
+    "3-review": EpicStatus.ACTIVE,
+    "4-done": EpicStatus.COMPLETED,
+    "7-archived": EpicStatus.COMPLETED,
 }
 
 
@@ -581,6 +583,7 @@ completed: null
             raise KeyError(f"Sprint not found: {sprint_id}")
 
         sprint = self._parse_sprint(path, sprint_id)
+        previous_status = sprint.status
         validate_transition(sprint_id, sprint.status, SprintStatus.DONE)
 
         # Verify all steps done or skipped
@@ -590,7 +593,7 @@ completed: null
 
         sprint.status = SprintStatus.DONE
         sprint.transitions.append(SprintTransition(
-            from_status=SprintStatus.IN_PROGRESS,
+            from_status=previous_status,
             to_status=SprintStatus.DONE,
             timestamp=_now(),
         ))
@@ -601,12 +604,79 @@ completed: null
 
         in_epic, _ = _is_in_epic(path)
         if not in_epic:
-            path = _move_to_column(path, self._kanban_dir, "3-done")
+            path = _move_to_column(path, self._kanban_dir, "4-done")
 
         # Update state file
         state = _read_state(self._kanban_dir, sprint_id) or {}
         state["status"] = "done"
         state["completed_at"] = _now_iso()
+        _write_state(self._kanban_dir, sprint_id, state)
+
+        return sprint
+
+    async def move_to_review(self, sprint_id: str) -> Sprint:
+        path = _find_sprint_file(self._kanban_dir, sprint_id)
+        if not path:
+            raise KeyError(f"Sprint not found: {sprint_id}")
+
+        sprint = self._parse_sprint(path, sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.REVIEW)
+
+        # Verify all steps done or skipped
+        terminal = {StepStatus.DONE, StepStatus.SKIPPED}
+        if sprint.steps and not all(s.status in terminal for s in sprint.steps):
+            raise ValueError(f"Not all steps are done for sprint {sprint_id}")
+
+        sprint.status = SprintStatus.REVIEW
+        sprint.transitions.append(SprintTransition(
+            from_status=SprintStatus.IN_PROGRESS,
+            to_status=SprintStatus.REVIEW,
+            timestamp=_now(),
+        ))
+
+        # Update filesystem
+        _update_yaml(path, status="review")
+        col = _column_of(path)
+        if col != "3-review":
+            path = _move_to_column(path, self._kanban_dir, "3-review")
+
+        # Update state file
+        state = _read_state(self._kanban_dir, sprint_id) or {}
+        state["status"] = "review"
+        _write_state(self._kanban_dir, sprint_id, state)
+
+        return sprint
+
+    async def reject_sprint(self, sprint_id: str, reason: str) -> Sprint:
+        path = _find_sprint_file(self._kanban_dir, sprint_id)
+        if not path:
+            raise KeyError(f"Sprint not found: {sprint_id}")
+
+        sprint = self._parse_sprint(path, sprint_id)
+        validate_transition(sprint_id, sprint.status, SprintStatus.IN_PROGRESS)
+
+        sprint.status = SprintStatus.IN_PROGRESS
+        sprint.transitions.append(SprintTransition(
+            from_status=SprintStatus.REVIEW,
+            to_status=SprintStatus.IN_PROGRESS,
+            timestamp=_now(),
+            reason=reason,
+        ))
+
+        # Update filesystem
+        _update_yaml(path, status="in-progress", rejection_reason=reason, rejected_at=_now_iso())
+        col = _column_of(path)
+        if col != "2-in-progress":
+            path = _move_to_column(path, self._kanban_dir, "2-in-progress")
+
+        # Update state file with rejection feedback
+        state = _read_state(self._kanban_dir, sprint_id) or {}
+        state["status"] = "in_progress"
+        state["rejection_reason"] = reason
+        state.setdefault("rejection_history", []).append({
+            "reason": reason,
+            "timestamp": _now_iso(),
+        })
         _write_state(self._kanban_dir, sprint_id, state)
 
         return sprint
@@ -713,6 +783,8 @@ completed: null
         yaml_status = yaml.get("status")
         if yaml_status == "in-progress" and status == SprintStatus.TODO:
             status = SprintStatus.IN_PROGRESS
+        elif yaml_status == "review" and status != SprintStatus.REVIEW:
+            status = SprintStatus.REVIEW
 
         in_epic, epic_id = _is_in_epic(path)
         if not epic_id:

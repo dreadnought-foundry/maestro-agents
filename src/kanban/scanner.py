@@ -17,20 +17,22 @@ STATUS_FOLDERS = [
     "0-backlog",
     "1-todo",
     "2-in-progress",
-    "3-done",
-    "4-blocked",
-    "5-abandoned",
-    "6-archived",
+    "3-review",
+    "4-done",
+    "5-blocked",
+    "6-abandoned",
+    "7-archived",
 ]
 
 _STATUS_MAP = {
     "0-backlog": "backlog",
     "1-todo": "todo",
     "2-in-progress": "in-progress",
-    "3-done": "done",
-    "4-blocked": "blocked",
-    "5-abandoned": "abandoned",
-    "6-archived": "archived",
+    "3-review": "review",
+    "4-done": "done",
+    "5-blocked": "blocked",
+    "6-abandoned": "abandoned",
+    "7-archived": "archived",
 }
 
 

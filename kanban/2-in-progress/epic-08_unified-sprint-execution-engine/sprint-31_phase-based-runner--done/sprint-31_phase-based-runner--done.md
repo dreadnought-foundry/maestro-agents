@@ -3,11 +3,11 @@ sprint: 31
 title: "Phase-Based Runner"
 type: backend
 epic: 8
-status: in-progress
+status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T20:20:54Z
-completed: null
-hours: null
+completed: 2026-02-20T20:35:50Z
+hours: 0.2
 ---
 
 # Sprint 31: Phase-Based Runner

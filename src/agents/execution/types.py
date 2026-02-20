@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.workflow.models import Epic, Sprint, Step
+
+if TYPE_CHECKING:
+    from src.execution.planning_artifacts import PlanningArtifacts
 
 
 @dataclass
@@ -29,3 +33,4 @@ class StepContext:
     previous_outputs: list[AgentResult] = field(default_factory=list)
     cumulative_deferred: str | None = None
     cumulative_postmortem: str | None = None
+    planning_artifacts: PlanningArtifacts | None = None
