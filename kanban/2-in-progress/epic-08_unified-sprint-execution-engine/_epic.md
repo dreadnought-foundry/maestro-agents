@@ -44,7 +44,8 @@ If the user rejects: `/sprint-reject 29 "reason"` → moves back to In Progress 
 | 32 | PlanningAgent & Planning Artifacts | backend | 31 |
 | 33 | Parallel Execution & Step Dependencies | backend | 31 |
 | 34 | Validation Phase | backend | 31, 33 |
-| 35 | End-to-End Integration | integration | 29–34 |
+| 35 | End-to-End Integration | integration | 29–36 |
+| 36 | Kanban TUI Split Rendering | frontend | 30 |
 
 ## Success Criteria
 
@@ -53,6 +54,8 @@ If the user rejects: `/sprint-reject 29 "reason"` → moves back to In Progress 
 - [ ] Sprint execution follows 6 phases: Plan → TDD → Build → Validate → Review → Complete
 - [ ] PlanningAgent generates contracts, team plan, TDD strategy, coding strategy before execution
 - [ ] Review column visible on kanban board; user sees sprints waiting for sign-off
+- [ ] Sprints render in the correct column by status, not by epic folder location
+- [ ] Complete/reject actions available directly from the kanban TUI board
 - [ ] `/sprint-reject` moves sprint back to In Progress with feedback
 - [ ] Agents can run in parallel within a phase when the team plan allows it
 - [ ] Validation phase can spin up services/UIs and verify what was built
