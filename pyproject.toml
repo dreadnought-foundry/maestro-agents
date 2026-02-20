@@ -1,7 +1,7 @@
 [project]
-name = "team-agents-poc"
+name = "maestro-agents"
 version = "0.1.0"
-description = "Learning project for Claude Code agents — future integration with claude-maestro"
+description = "Multi-agent sprint execution system built on claude-agent-sdk. Evolved from claude-maestro."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

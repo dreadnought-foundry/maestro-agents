@@ -17,3 +17,6 @@ wheels/
 
 # Runtime data
 .maestro/
+
+# Sprint state files (generated at runtime)
+.claude/sprint-*-state.json
