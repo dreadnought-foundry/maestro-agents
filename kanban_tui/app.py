@@ -376,6 +376,7 @@ class KanbanApp(App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
+        Binding("s", "start_sprint", "Start"),
         Binding("m", "move_card", "Move"),
         Binding("c", "complete_review", "Complete"),
         Binding("x", "reject_review", "Reject"),
@@ -584,14 +585,66 @@ class KanbanApp(App):
 
         self.push_screen(MoveScreen(card, current_col, self.columns, self.kanban_dir), callback=_on_move_result)
 
-    # -- Review actions (complete / reject) --
+    # -- Sprint actions (start / complete / reject) --
+
+    def _is_in_todo_column(self) -> bool:
+        """Check if the focused card is in the todo column."""
+        card, col = self._get_focused_card_info()
+        return card is not None and col == "1-todo"
 
     def _is_in_review_column(self) -> bool:
         """Check if the focused card is in the review column."""
         card, col = self._get_focused_card_info()
         return card is not None and col == "3-review"
 
-    def action_complete_review(self) -> None:
+    def _get_sprint_id(self, sprint: SprintInfo) -> str:
+        """Derive sprint ID for the execution engine from sprint info."""
+        return f"sprint-{sprint.number}"
+
+    async def action_start_sprint(self) -> None:
+        """Start a sprint: run the full execution engine (PLAN → VALIDATE → REVIEW)."""
+        if not self._is_in_todo_column():
+            self.notify("Start is only available for sprints in the Todo column", severity="warning")
+            return
+        card, _ = self._get_focused_card_info()
+        if not isinstance(card, SprintCard):
+            self.notify("Select a sprint card to start", severity="warning")
+            return
+
+        sprint = card.sprint
+        self.notify(f"Starting S-{sprint.number:02d}... (PLAN → TDD → BUILD → VALIDATE)")
+
+        try:
+            from src.adapters.kanban import KanbanAdapter
+            from src.execution.convenience import run_sprint
+
+            backend = KanbanAdapter(self.kanban_dir)
+            sprint_id = self._get_sprint_id(sprint)
+
+            result = await run_sprint(
+                sprint_id,
+                backend=backend,
+                kanban_dir=self.kanban_dir,
+            )
+
+            if result.success:
+                if result.stopped_at_review:
+                    self.notify(
+                        f"S-{sprint.number:02d} ready for review! "
+                        f"({len(result.phase_results)} phases complete)",
+                        severity="information",
+                    )
+                else:
+                    self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+            else:
+                phase = result.current_phase.value.upper() if result.current_phase else "unknown"
+                self.notify(f"S-{sprint.number:02d} blocked at {phase}", severity="error")
+        except Exception as e:
+            self.notify(f"S-{sprint.number:02d} failed: {e}", severity="error")
+
+        await self.action_refresh()
+
+    async def action_complete_review(self) -> None:
         if not self._is_in_review_column():
             self.notify("Complete is only available for cards in the Review column", severity="warning")
             return
@@ -601,27 +654,31 @@ class KanbanApp(App):
             return
 
         sprint = card.sprint
-        src = sprint.movable_path
-        parent = src.parent
 
-        # Move sprint (or its epic) from 3-review to 4-done, add --done suffix
-        if parent.name.startswith("epic-"):
-            # Inside an epic — add --done suffix, don't move epic
-            self._add_done_suffix(src)
-        else:
-            # Standalone sprint — add suffix and move to 4-done
-            self._add_done_suffix(src)
-            target = self.kanban_dir / "4-done"
-            target.mkdir(parents=True, exist_ok=True)
-            new_src = src.parent / (src.name.replace(src.stem, src.stem + "--done")) if src.is_file() else src
-            # Re-locate after suffix
-            done_name = src.name + "--done" if src.is_dir() else src.name
-            done_path = src.parent / done_name if src.is_dir() else src
-            if done_path.exists():
-                shutil.move(str(done_path), str(target / done_path.name))
+        try:
+            from src.adapters.kanban import KanbanAdapter
 
-        self.call_later(self.action_refresh)
-        self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+            backend = KanbanAdapter(self.kanban_dir)
+            sprint_id = self._get_sprint_id(sprint)
+            await backend.complete_sprint(sprint_id)
+            self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+        except Exception:
+            # Fallback to filesystem operations if adapter fails
+            src = sprint.movable_path
+            parent = src.parent
+            if parent.name.startswith("epic-"):
+                self._add_done_suffix(src)
+            else:
+                self._add_done_suffix(src)
+                target = self.kanban_dir / "4-done"
+                target.mkdir(parents=True, exist_ok=True)
+                done_name = src.name + "--done" if src.is_dir() else src.name
+                done_path = src.parent / done_name if src.is_dir() else src
+                if done_path.exists():
+                    shutil.move(str(done_path), str(target / done_path.name))
+            self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+
+        await self.action_refresh()
 
     def _add_done_suffix(self, path: Path) -> None:
         """Add --done suffix to a sprint dir/file."""
@@ -648,16 +705,25 @@ class KanbanApp(App):
         def _on_reject_result(reason: str | None) -> None:
             if reason is None:
                 return
-            src = sprint.movable_path
-            parent = src.parent
-            target = self.kanban_dir / "2-in-progress"
-            target.mkdir(parents=True, exist_ok=True)
 
-            if parent.name.startswith("epic-"):
-                # Inside epic — move entire epic back to in-progress
-                shutil.move(str(parent), str(target / parent.name))
-            else:
-                shutil.move(str(src), str(target / src.name))
+            try:
+                import asyncio
+
+                from src.adapters.kanban import KanbanAdapter
+
+                backend = KanbanAdapter(self.kanban_dir)
+                sprint_id = self._get_sprint_id(sprint)
+                asyncio.get_event_loop().create_task(backend.reject_sprint(sprint_id, reason))
+            except Exception:
+                # Fallback to filesystem operations
+                src = sprint.movable_path
+                parent = src.parent
+                target = self.kanban_dir / "2-in-progress"
+                target.mkdir(parents=True, exist_ok=True)
+                if parent.name.startswith("epic-"):
+                    shutil.move(str(parent), str(target / parent.name))
+                else:
+                    shutil.move(str(src), str(target / src.name))
 
             self.call_later(self.action_refresh)
             self.notify(f"S-{sprint.number:02d} rejected: {reason}", severity="warning")
@@ -688,6 +754,6 @@ class KanbanApp(App):
 
     def action_help_screen(self) -> None:
         self.notify(
-            "[bold]Keys:[/] Left/Right=cols  Up/Down=cards  Enter=expand/collapse  m=move  d=detail  a=all cols  r=refresh  q=quit",
+            "[bold]Keys:[/] s=start  c=complete  x=reject  m=move  Left/Right=cols  Up/Down=cards  Enter=expand  d=detail  a=all cols  r=refresh  q=quit",
             timeout=6,
         )
