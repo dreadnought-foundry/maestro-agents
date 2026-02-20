@@ -14,7 +14,8 @@ from src.execution.config import RunConfig
 from src.execution.context_selector import select_context
 from src.execution.dependencies import validate_sprint_dependencies
 from src.execution.hooks import HookContext, HookPoint, HookRegistry, HookResult
-from src.workflow.models import StepStatus
+from src.execution.phases import Phase, PhaseConfig, PhaseResult
+from src.workflow.models import SprintStatus, StepStatus
 
 
 @dataclass
@@ -27,6 +28,9 @@ class RunResult:
     deferred_items: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
     hook_results: dict[str, list[HookResult]] = field(default_factory=dict)
+    phase_results: list[PhaseResult] = field(default_factory=list)
+    current_phase: Phase | None = None
+    stopped_at_review: bool = False
 
 
 class SprintRunner:
@@ -42,6 +46,7 @@ class SprintRunner:
         artifact_dir: Path | None = None,
         kanban_dir: Path | None = None,
         synthesizer=None,
+        phase_configs: list[PhaseConfig] | None = None,
     ):
         self._backend = backend
         self._registry = agent_registry
@@ -51,6 +56,7 @@ class SprintRunner:
         self._artifact_dir = artifact_dir
         self._kanban_dir = kanban_dir
         self._synthesizer = synthesizer
+        self._phase_configs = phase_configs
 
     async def _evaluate_hooks(
         self,
@@ -90,7 +96,295 @@ class SprintRunner:
         sprint_id: str,
         on_progress: Callable | None = None,
     ) -> RunResult:
-        """Run a sprint from start to completion."""
+        """Run a sprint from start to completion.
+
+        If phase_configs were provided, runs in phase-based mode.
+        Otherwise, runs the original flat step loop for backwards compatibility.
+        """
+        if self._phase_configs is not None:
+            return await self._run_phased(sprint_id, on_progress)
+        return await self._run_flat(sprint_id, on_progress)
+
+    # ------------------------------------------------------------------
+    # Phase-based execution
+    # ------------------------------------------------------------------
+
+    async def _run_phased(
+        self,
+        sprint_id: str,
+        on_progress: Callable | None = None,
+    ) -> RunResult:
+        """Run a sprint using phase-based execution."""
+        start_time = time.monotonic()
+        agent_results: list[AgentResult] = []
+        deferred_items: list[str] = []
+        hook_results: dict[str, list[HookResult]] = {}
+        phase_results: list[PhaseResult] = []
+        run_state: dict = {"agent_results": agent_results}
+
+        # --- Dependency check ---
+        await validate_sprint_dependencies(sprint_id, self._backend)
+
+        # --- Load cumulative context ---
+        cumulative_deferred = self._read_kanban_file("deferred.md")
+        cumulative_postmortem = self._read_kanban_file("postmortem.md")
+
+        # Start the sprint
+        sprint = await self._backend.start_sprint(sprint_id)
+        epic = await self._backend.get_epic(sprint.epic_id)
+
+        # --- PRE_SPRINT hooks ---
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        if not await self._evaluate_hooks(HookPoint.PRE_SPRINT, hook_ctx, hook_results):
+            await self._backend.block_sprint(sprint_id, "PRE_SPRINT hook failed")
+            return self._make_result(
+                sprint_id, False, start_time, agent_results, deferred_items,
+                hook_results, phase_results, current_phase=Phase.PLAN,
+            )
+
+        # --- Execute phases ---
+        resume_phase = sprint.metadata.get("current_phase")
+        started = False
+
+        for phase_config in self._phase_configs:
+            # Support resume: skip phases already completed
+            if resume_phase is not None and not started:
+                if phase_config.phase.value == resume_phase:
+                    started = True
+                else:
+                    continue
+            else:
+                started = True
+
+            # REVIEW phase: stop and transition to review status
+            if phase_config.phase is Phase.REVIEW:
+                if hasattr(self._backend, 'update_sprint'):
+                    try:
+                        await self._backend.update_sprint(
+                            sprint_id, status=SprintStatus.REVIEW,
+                        )
+                    except (ValueError, KeyError):
+                        pass
+                elapsed = time.monotonic() - start_time
+                step_status = await self._backend.get_step_status(sprint_id)
+                return RunResult(
+                    sprint_id=sprint_id,
+                    success=True,
+                    steps_completed=step_status["completed_steps"],
+                    steps_total=step_status["total_steps"],
+                    agent_results=agent_results,
+                    deferred_items=deferred_items,
+                    duration_seconds=elapsed,
+                    hook_results=hook_results,
+                    phase_results=phase_results,
+                    current_phase=Phase.REVIEW,
+                    stopped_at_review=True,
+                )
+
+            # COMPLETE phase: generate artifacts, no agent
+            if phase_config.phase is Phase.COMPLETE:
+                phase_result = PhaseResult(
+                    phase=Phase.COMPLETE,
+                    success=True,
+                    artifacts_produced=phase_config.artifacts,
+                )
+                phase_results.append(phase_result)
+                continue
+
+            # Execute phase with agent
+            if phase_config.agent_type is not None:
+                phase_result = await self._execute_phase(
+                    phase_config, sprint_id, sprint, epic,
+                    agent_results, cumulative_deferred, cumulative_postmortem,
+                    hook_results, run_state,
+                )
+                phase_results.append(phase_result)
+                deferred_items.extend(phase_result.deferred_items)
+
+                # Report progress
+                if on_progress:
+                    step_status = await self._backend.get_step_status(sprint_id)
+                    step_status["current_phase"] = phase_config.phase.value
+                    step_status["phases_completed"] = len(phase_results)
+                    step_status["phases_total"] = len(self._phase_configs)
+                    on_progress(step_status)
+
+                if not phase_result.success:
+                    await self._backend.block_sprint(
+                        sprint_id,
+                        f"Phase '{phase_config.phase.value}' failed: {phase_result.gate_reason or 'agent failure'}",
+                    )
+                    return self._make_result(
+                        sprint_id, False, start_time, agent_results, deferred_items,
+                        hook_results, phase_results, current_phase=phase_config.phase,
+                    )
+
+                # Check gate
+                if phase_config.gate is not None:
+                    gate_passed, gate_reason = await phase_config.gate(phase_result)
+                    phase_result.gate_passed = gate_passed
+                    phase_result.gate_reason = gate_reason
+                    if not gate_passed:
+                        phase_result.success = False
+                        await self._backend.block_sprint(
+                            sprint_id,
+                            f"Gate failed for phase '{phase_config.phase.value}': {gate_reason}",
+                        )
+                        return self._make_result(
+                            sprint_id, False, start_time, agent_results, deferred_items,
+                            hook_results, phase_results, current_phase=phase_config.phase,
+                        )
+
+        # --- PRE_COMPLETION hooks ---
+        sprint = await self._backend.get_sprint(sprint_id)
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        if not await self._evaluate_hooks(HookPoint.PRE_COMPLETION, hook_ctx, hook_results):
+            await self._backend.block_sprint(sprint_id, "PRE_COMPLETION hook failed")
+            return self._make_result(
+                sprint_id, False, start_time, agent_results, deferred_items,
+                hook_results, phase_results,
+            )
+
+        # Advance all backend steps to DONE so complete_sprint validation passes
+        sprint = await self._backend.get_sprint(sprint_id)
+        for step in sprint.steps:
+            if step.status is StepStatus.IN_PROGRESS:
+                await self._backend.advance_step(sprint_id, {"output": "phase-completed"})
+
+        # Complete
+        await self._backend.complete_sprint(sprint_id)
+        elapsed = time.monotonic() - start_time
+        step_status = await self._backend.get_step_status(sprint_id)
+
+        run_result = RunResult(
+            sprint_id=sprint_id,
+            success=True,
+            steps_completed=step_status["completed_steps"],
+            steps_total=step_status["total_steps"],
+            agent_results=agent_results,
+            deferred_items=deferred_items,
+            duration_seconds=elapsed,
+            hook_results=hook_results,
+            phase_results=phase_results,
+            current_phase=Phase.COMPLETE,
+        )
+
+        sprint = await self._backend.get_sprint(sprint_id)
+        await self._generate_artifacts(sprint, run_result)
+
+        # --- POST_COMPLETION hooks ---
+        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
+        await self._evaluate_hooks(HookPoint.POST_COMPLETION, hook_ctx, hook_results)
+
+        return run_result
+
+    async def _execute_phase(
+        self,
+        phase_config: PhaseConfig,
+        sprint_id: str,
+        sprint,
+        epic,
+        agent_results: list[AgentResult],
+        cumulative_deferred: str | None,
+        cumulative_postmortem: str | None,
+        hook_results: dict[str, list[HookResult]],
+        run_state: dict,
+    ) -> PhaseResult:
+        """Execute a single phase by dispatching to its configured agent."""
+        agent = self._registry.get_agent(phase_config.agent_type)
+
+        # Build a synthetic step for the phase
+        from src.workflow.models import Step
+
+        phase_step = Step(
+            id=f"phase-{phase_config.phase.value}",
+            name=phase_config.phase.value,
+            status=StepStatus.IN_PROGRESS,
+            metadata={"type": phase_config.agent_type, "phase": phase_config.phase.value},
+        )
+
+        selected = select_context(
+            step_type=phase_config.agent_type,
+            sprint_goal=sprint.goal,
+            cumulative_deferred=cumulative_deferred,
+            cumulative_postmortem=cumulative_postmortem,
+        )
+
+        context = StepContext(
+            step=phase_step,
+            sprint=sprint,
+            epic=epic,
+            project_root=self._project_root,
+            previous_outputs=list(agent_results),
+            cumulative_deferred=selected.deferred,
+            cumulative_postmortem=selected.postmortem,
+        )
+
+        # Execute with retry (using phase-specific max_retries if set)
+        max_retries = phase_config.max_retries
+        result = await agent.execute(context)
+        retries = 0
+        while not result.success and retries < max_retries:
+            if self._config.retry_delay_seconds > 0:
+                await asyncio.sleep(self._config.retry_delay_seconds)
+            result = await agent.execute(context)
+            retries += 1
+
+        agent_results.append(result)
+
+        # POST_STEP hook for the phase
+        hook_ctx = HookContext(
+            sprint=sprint,
+            step=phase_step,
+            agent_result=result,
+            run_state=run_state,
+        )
+        hooks_ok = await self._evaluate_hooks(HookPoint.POST_STEP, hook_ctx, hook_results)
+
+        return PhaseResult(
+            phase=phase_config.phase,
+            success=result.success and hooks_ok,
+            agent_results=[result],
+            artifacts_produced=phase_config.artifacts if result.success else [],
+            deferred_items=list(result.deferred_items),
+        )
+
+    def _make_result(
+        self,
+        sprint_id: str,
+        success: bool,
+        start_time: float,
+        agent_results: list[AgentResult],
+        deferred_items: list[str],
+        hook_results: dict[str, list[HookResult]],
+        phase_results: list[PhaseResult],
+        current_phase: Phase | None = None,
+    ) -> RunResult:
+        """Build a RunResult with current timing."""
+        elapsed = time.monotonic() - start_time
+        return RunResult(
+            sprint_id=sprint_id,
+            success=success,
+            steps_completed=len([pr for pr in phase_results if pr.success]),
+            steps_total=len(self._phase_configs) if self._phase_configs else 0,
+            agent_results=agent_results,
+            deferred_items=deferred_items,
+            duration_seconds=elapsed,
+            hook_results=hook_results,
+            phase_results=phase_results,
+            current_phase=current_phase,
+        )
+
+    # ------------------------------------------------------------------
+    # Original flat-step execution (backwards compatible)
+    # ------------------------------------------------------------------
+
+    async def _run_flat(
+        self,
+        sprint_id: str,
+        on_progress: Callable | None = None,
+    ) -> RunResult:
+        """Run a sprint using the original flat step loop."""
         start_time = time.monotonic()
         agent_results: list[AgentResult] = []
         deferred_items: list[str] = []
