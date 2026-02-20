@@ -116,7 +116,7 @@ def default_phase_configs() -> list[PhaseConfig]:
         ),
         PhaseConfig(
             phase=Phase.VALIDATE,
-            agent_type="test",
+            agent_type="validate",
             artifacts=["validation_report"],
         ),
         PhaseConfig(

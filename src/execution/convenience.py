@@ -88,14 +88,21 @@ async def run_sprint(
     synthesizer=None,
     grooming_agent=None,
     mock: bool = False,
+    phase_configs: list | None = None,
 ) -> RunResult:
     """Convenience function to run a sprint with sensible defaults.
 
     Uses real ClaudeCodeExecutor agents by default. Pass mock=True for
-    fast testing without burning tokens.
+    fast testing without burning tokens. Uses phase-based execution
+    (PLAN → TDD → BUILD → VALIDATE → REVIEW → COMPLETE) by default.
     """
+    from src.execution.phases import default_phase_configs
+
     if agent_registry is None:
         agent_registry = create_registry() if not mock else create_test_registry()
+
+    if phase_configs is None:
+        phase_configs = default_phase_configs()
 
     hook_registry = create_hook_registry(
         kanban_dir=kanban_dir, grooming_agent=grooming_agent,
@@ -108,5 +115,6 @@ async def run_sprint(
         hook_registry=hook_registry,
         kanban_dir=kanban_dir,
         synthesizer=synthesizer,
+        phase_configs=phase_configs,
     )
     return await runner.run(sprint_id, on_progress=on_progress)

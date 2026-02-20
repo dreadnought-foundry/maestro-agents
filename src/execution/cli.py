@@ -1,7 +1,8 @@
 """CLI entry point for sprint execution and backlog grooming.
 
 Usage:
-  python -m src.execution run <sprint_id> [--project-root PATH]
+  python -m src.execution run <sprint_id> [--project-root PATH] [--kanban-dir kanban]
+  python -m src.execution status <sprint_id> [--kanban-dir kanban]
   python -m src.execution groom [--kanban-dir kanban] [--model sonnet] [--epic NUM]
 """
 
@@ -10,9 +11,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-
-from src.adapters.memory import InMemoryAdapter
-from src.execution.convenience import run_sprint
 
 
 def main() -> None:
@@ -28,6 +26,7 @@ def main() -> None:
 
     status_parser = subparsers.add_parser("status", help="Show sprint status")
     status_parser.add_argument("sprint_id", help="Sprint ID to check")
+    status_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
 
     groom_parser = subparsers.add_parser("groom", help="Run backlog grooming")
     groom_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
@@ -51,15 +50,32 @@ def main() -> None:
 async def _run_command(args) -> None:
     from pathlib import Path
 
-    backend = InMemoryAdapter(project_name="cli-project")
+    from src.execution.convenience import run_sprint
+
     kanban_dir = Path(args.kanban_dir)
-    kanban_path = kanban_dir if kanban_dir.exists() else None
+
+    if args.mock:
+        from src.adapters.memory import InMemoryAdapter
+        backend = InMemoryAdapter(project_name="cli-project")
+        kanban_path = None
+    else:
+        from src.adapters.kanban import KanbanAdapter
+        if not kanban_dir.exists():
+            print(f"Error: Kanban directory not found: {kanban_dir}", file=sys.stderr)
+            print("Use --mock for testing without a kanban directory.", file=sys.stderr)
+            sys.exit(1)
+        backend = KanbanAdapter(kanban_dir)
+        kanban_path = kanban_dir
 
     def on_progress(status):
-        completed = status["completed_steps"]
-        total = status["total_steps"]
-        pct = status["progress_pct"]
-        print(f"  Progress: {completed}/{total} steps ({pct}%)")
+        phase = status.get("current_phase", "")
+        completed = status.get("phases_completed", status.get("completed_steps", 0))
+        total = status.get("phases_total", status.get("total_steps", 0))
+        if phase:
+            print(f"  Phase: {phase.upper()} ({completed}/{total} phases complete)")
+        else:
+            pct = status.get("progress_pct", 0)
+            print(f"  Progress: {completed}/{total} steps ({pct}%)")
 
     try:
         result = await run_sprint(
@@ -70,9 +86,23 @@ async def _run_command(args) -> None:
             kanban_dir=kanban_path,
             mock=args.mock,
         )
-        print(f"\nSprint {result.sprint_id}: {'SUCCESS' if result.success else 'FAILED'}")
-        print(f"Steps: {result.steps_completed}/{result.steps_total}")
+
+        status = "SUCCESS" if result.success else "FAILED"
+        if result.stopped_at_review:
+            status = "IN REVIEW"
+
+        print(f"\nSprint {result.sprint_id}: {status}")
+
+        if result.phase_results:
+            print(f"Phases: {len(result.phase_results)} completed")
+            for pr in result.phase_results:
+                icon = "PASS" if pr.success else "FAIL"
+                print(f"  [{icon}] {pr.phase.value.upper()}")
+        else:
+            print(f"Steps: {result.steps_completed}/{result.steps_total}")
+
         print(f"Duration: {result.duration_seconds:.2f}s")
+
         if result.deferred_items:
             print("Deferred items:")
             for item in result.deferred_items:
@@ -83,7 +113,16 @@ async def _run_command(args) -> None:
 
 
 async def _status_command(args) -> None:
-    backend = InMemoryAdapter()
+    from pathlib import Path
+
+    kanban_dir = Path(args.kanban_dir)
+    if kanban_dir.exists():
+        from src.adapters.kanban import KanbanAdapter
+        backend = KanbanAdapter(kanban_dir)
+    else:
+        from src.adapters.memory import InMemoryAdapter
+        backend = InMemoryAdapter()
+
     try:
         status = await backend.get_step_status(args.sprint_id)
         print(f"Sprint {args.sprint_id}")
