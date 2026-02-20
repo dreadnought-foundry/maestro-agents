@@ -229,7 +229,7 @@ async def test_no_phase_configs_uses_flat_steps():
     assert result.success is True
     assert result.steps_completed == 2
     assert result.phase_results == []  # No phase results in flat mode
-    assert result.stopped_at_review is False
+    assert result.stopped_at_review is True  # Flat mode now stops at review (Sprint 30)
 
 
 async def test_flat_mode_still_works_with_all_features():

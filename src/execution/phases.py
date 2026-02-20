@@ -47,6 +47,10 @@ class PhaseConfig:
         phase: Which phase this configures.
         agent_type: Step type name to look up in AgentRegistry (e.g. "implement", "test").
             None means no agent execution (e.g. REVIEW is human, COMPLETE is system).
+            Used when steps is empty (single-agent phase).
+        steps: Optional list of Steps for multi-step phases with dependency DAGs.
+            When provided, the scheduler runs steps concurrently based on depends_on.
+            Each step's metadata["type"] determines which agent to use.
         gate: Async callable that checks whether the phase's exit condition is met.
             Receives the PhaseResult and returns (passed, reason).
             None means no gate check — phase always passes.
@@ -57,6 +61,7 @@ class PhaseConfig:
 
     phase: Phase
     agent_type: str | None = None
+    steps: list[Any] | None = None  # list[Step] — deferred import to avoid circular
     gate: GateCheck | None = None
     artifacts: list[str] = field(default_factory=list)
     required: bool = True
@@ -89,14 +94,14 @@ class PhaseResult:
 def default_phase_configs() -> list[PhaseConfig]:
     """Return the default phase configuration for a standard sprint.
 
-    PLAN and BUILD use 'implement' agent type. TDD uses 'test' (write tests).
-    VALIDATE uses 'test' (run tests). REVIEW has no agent (human checkpoint).
-    COMPLETE has no agent (system generates artifacts).
+    PLAN uses 'planning' agent (PlanningAgent). BUILD uses 'implement'.
+    TDD uses 'test' (write tests). VALIDATE uses 'test' (run tests).
+    REVIEW has no agent (human checkpoint). COMPLETE has no agent (system).
     """
     return [
         PhaseConfig(
             phase=Phase.PLAN,
-            agent_type="implement",
+            agent_type="planning",
             artifacts=["contracts", "team_plan", "tdd_strategy", "coding_strategy", "context_brief"],
         ),
         PhaseConfig(

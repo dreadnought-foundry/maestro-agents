@@ -74,6 +74,30 @@ class SprintRunner:
                 return False
         return True
 
+    def _store_planning_artifacts(self, phase_result: PhaseResult, run_state: dict) -> None:
+        """Parse planning artifacts from PLAN phase output and store in run_state."""
+        from src.agents.execution.planning_agent import _parse_artifacts
+
+        for ar in phase_result.agent_results:
+            if ar.success and ar.output:
+                artifacts = _parse_artifacts(ar.output)
+                if artifacts.is_complete():
+                    run_state["planning_artifacts"] = artifacts
+                    return
+
+    async def _generate_draft_quality_report(self, sprint, run_result: RunResult) -> None:
+        """Generate a draft quality report when sprint enters review."""
+        from src.execution.artifacts import ArtifactGenerator
+
+        generator = ArtifactGenerator(sprint=sprint, run_result=run_result)
+        quality_content = generator.generate_quality_report()
+
+        # Write to sprint artifact dir if configured
+        if self._artifact_dir is not None:
+            self._artifact_dir.mkdir(parents=True, exist_ok=True)
+            path = self._artifact_dir / f"{sprint.id}_quality.md"
+            path.write_text(quality_content)
+
     async def _generate_artifacts(self, sprint, run_result: RunResult) -> None:
         """Generate artifact files if artifact_dir or kanban_dir are configured."""
         from src.execution.artifacts import ArtifactGenerator
@@ -158,16 +182,19 @@ class SprintRunner:
 
             # REVIEW phase: stop and transition to review status
             if phase_config.phase is Phase.REVIEW:
-                if hasattr(self._backend, 'update_sprint'):
-                    try:
-                        await self._backend.update_sprint(
-                            sprint_id, status=SprintStatus.REVIEW,
-                        )
-                    except (ValueError, KeyError):
-                        pass
+                # Advance all backend steps to DONE so move_to_review validation passes
+                sprint = await self._backend.get_sprint(sprint_id)
+                for step in sprint.steps:
+                    if step.status is StepStatus.IN_PROGRESS:
+                        await self._backend.advance_step(sprint_id, {"output": "phase-completed"})
+
+                await self._backend.move_to_review(sprint_id)
+
+                # Generate draft quality report
+                sprint = await self._backend.get_sprint(sprint_id)
                 elapsed = time.monotonic() - start_time
                 step_status = await self._backend.get_step_status(sprint_id)
-                return RunResult(
+                run_result = RunResult(
                     sprint_id=sprint_id,
                     success=True,
                     steps_completed=step_status["completed_steps"],
@@ -180,6 +207,8 @@ class SprintRunner:
                     current_phase=Phase.REVIEW,
                     stopped_at_review=True,
                 )
+                await self._generate_draft_quality_report(sprint, run_result)
+                return run_result
 
             # COMPLETE phase: generate artifacts, no agent
             if phase_config.phase is Phase.COMPLETE:
@@ -191,8 +220,8 @@ class SprintRunner:
                 phase_results.append(phase_result)
                 continue
 
-            # Execute phase with agent
-            if phase_config.agent_type is not None:
+            # Execute phase with agent(s)
+            if phase_config.agent_type is not None or phase_config.steps:
                 phase_result = await self._execute_phase(
                     phase_config, sprint_id, sprint, epic,
                     agent_results, cumulative_deferred, cumulative_postmortem,
@@ -200,6 +229,10 @@ class SprintRunner:
                 )
                 phase_results.append(phase_result)
                 deferred_items.extend(phase_result.deferred_items)
+
+                # After PLAN phase: parse and store planning artifacts
+                if phase_config.phase is Phase.PLAN and phase_result.success:
+                    self._store_planning_artifacts(phase_result, run_state)
 
                 # Report progress
                 if on_progress:
@@ -290,10 +323,38 @@ class SprintRunner:
         hook_results: dict[str, list[HookResult]],
         run_state: dict,
     ) -> PhaseResult:
-        """Execute a single phase by dispatching to its configured agent."""
+        """Execute a single phase.
+
+        If phase_config.steps is provided, uses DAG-based parallel execution.
+        Otherwise, dispatches a single agent for the phase.
+        """
+        if phase_config.steps:
+            return await self._execute_phase_parallel(
+                phase_config, sprint_id, sprint, epic,
+                agent_results, cumulative_deferred, cumulative_postmortem,
+                hook_results, run_state,
+            )
+        return await self._execute_phase_single(
+            phase_config, sprint_id, sprint, epic,
+            agent_results, cumulative_deferred, cumulative_postmortem,
+            hook_results, run_state,
+        )
+
+    async def _execute_phase_single(
+        self,
+        phase_config: PhaseConfig,
+        sprint_id: str,
+        sprint,
+        epic,
+        agent_results: list[AgentResult],
+        cumulative_deferred: str | None,
+        cumulative_postmortem: str | None,
+        hook_results: dict[str, list[HookResult]],
+        run_state: dict,
+    ) -> PhaseResult:
+        """Execute a single-agent phase (original behavior)."""
         agent = self._registry.get_agent(phase_config.agent_type)
 
-        # Build a synthetic step for the phase
         from src.workflow.models import Step
 
         phase_step = Step(
@@ -318,9 +379,9 @@ class SprintRunner:
             previous_outputs=list(agent_results),
             cumulative_deferred=selected.deferred,
             cumulative_postmortem=selected.postmortem,
+            planning_artifacts=run_state.get("planning_artifacts"),
         )
 
-        # Execute with retry (using phase-specific max_retries if set)
         max_retries = phase_config.max_retries
         result = await agent.execute(context)
         retries = 0
@@ -332,7 +393,6 @@ class SprintRunner:
 
         agent_results.append(result)
 
-        # POST_STEP hook for the phase
         hook_ctx = HookContext(
             sprint=sprint,
             step=phase_step,
@@ -347,6 +407,111 @@ class SprintRunner:
             agent_results=[result],
             artifacts_produced=phase_config.artifacts if result.success else [],
             deferred_items=list(result.deferred_items),
+        )
+
+    async def _execute_phase_parallel(
+        self,
+        phase_config: PhaseConfig,
+        sprint_id: str,
+        sprint,
+        epic,
+        agent_results: list[AgentResult],
+        cumulative_deferred: str | None,
+        cumulative_postmortem: str | None,
+        hook_results: dict[str, list[HookResult]],
+        run_state: dict,
+    ) -> PhaseResult:
+        """Execute a multi-step phase with DAG-based parallel scheduling."""
+        from src.execution.scheduler import Scheduler
+
+        scheduler = Scheduler(phase_config.steps)
+        phase_agent_results: list[AgentResult] = []
+        phase_deferred: list[str] = []
+        all_hooks_ok = True
+
+        while not scheduler.is_done():
+            ready_steps = scheduler.get_ready_steps()
+            if not ready_steps:
+                break  # Deadlock — remaining steps have unmet deps due to failures
+
+            for step in ready_steps:
+                scheduler.mark_in_progress(step.id)
+
+            async def _run_step(step):
+                step_type = step.metadata.get("type", step.name)
+                agent = self._registry.get_agent(step_type)
+
+                selected = select_context(
+                    step_type=step_type,
+                    sprint_goal=sprint.goal,
+                    cumulative_deferred=cumulative_deferred,
+                    cumulative_postmortem=cumulative_postmortem,
+                )
+
+                context = StepContext(
+                    step=step,
+                    sprint=sprint,
+                    epic=epic,
+                    project_root=self._project_root,
+                    previous_outputs=list(agent_results) + list(phase_agent_results),
+                    cumulative_deferred=selected.deferred,
+                    cumulative_postmortem=selected.postmortem,
+                    planning_artifacts=run_state.get("planning_artifacts"),
+                )
+
+                max_retries = phase_config.max_retries
+                result = await agent.execute(context)
+                retries = 0
+                while not result.success and retries < max_retries:
+                    if self._config.retry_delay_seconds > 0:
+                        await asyncio.sleep(self._config.retry_delay_seconds)
+                    result = await agent.execute(context)
+                    retries += 1
+
+                return step.id, result
+
+            # Run all ready steps concurrently
+            results = await asyncio.gather(
+                *[_run_step(step) for step in ready_steps],
+                return_exceptions=True,
+            )
+
+            for item in results:
+                if isinstance(item, Exception):
+                    # Unexpected exception — treat as failure
+                    all_hooks_ok = False
+                    continue
+
+                step_id, result = item
+                phase_agent_results.append(result)
+                agent_results.append(result)
+                phase_deferred.extend(result.deferred_items)
+
+                if result.success:
+                    scheduler.mark_complete(step_id)
+                else:
+                    scheduler.mark_failed(step_id)
+
+                # POST_STEP hook per step
+                step_obj = next(s for s in phase_config.steps if s.id == step_id)
+                hook_ctx = HookContext(
+                    sprint=sprint,
+                    step=step_obj,
+                    agent_result=result,
+                    run_state=run_state,
+                )
+                hooks_ok = await self._evaluate_hooks(HookPoint.POST_STEP, hook_ctx, hook_results)
+                if not hooks_ok:
+                    all_hooks_ok = False
+
+        success = not scheduler.has_failures() and all_hooks_ok
+
+        return PhaseResult(
+            phase=phase_config.phase,
+            success=success,
+            agent_results=phase_agent_results,
+            artifacts_produced=phase_config.artifacts if success else [],
+            deferred_items=phase_deferred,
         )
 
     def _make_result(
@@ -541,8 +706,8 @@ class SprintRunner:
             await self._generate_artifacts(sprint, run_result)
             return run_result
 
-        # Complete the sprint
-        await self._backend.complete_sprint(sprint_id)
+        # Move to review instead of completing directly
+        await self._backend.move_to_review(sprint_id)
         elapsed = time.monotonic() - start_time
         step_status = await self._backend.get_step_status(sprint_id)
 
@@ -555,14 +720,12 @@ class SprintRunner:
             deferred_items=deferred_items,
             duration_seconds=elapsed,
             hook_results=hook_results,
+            stopped_at_review=True,
         )
 
+        # Generate draft quality report for reviewer
         sprint = await self._backend.get_sprint(sprint_id)
-        await self._generate_artifacts(sprint, run_result)
-
-        # --- POST_COMPLETION hooks (non-blocking, informational) ---
-        hook_ctx = HookContext(sprint=sprint, run_state=run_state)
-        await self._evaluate_hooks(HookPoint.POST_COMPLETION, hook_ctx, hook_results)
+        await self._generate_draft_quality_report(sprint, run_result)
 
         return run_result
 

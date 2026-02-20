@@ -11,6 +11,7 @@ class SprintStatus(Enum):
     BACKLOG = "backlog"
     TODO = "todo"
     IN_PROGRESS = "in_progress"
+    REVIEW = "review"
     DONE = "done"
     BLOCKED = "blocked"
     ABANDONED = "abandoned"
@@ -41,6 +42,7 @@ class Step:
     output: dict | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    depends_on: list[str] = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
 
 

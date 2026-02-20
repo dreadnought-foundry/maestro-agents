@@ -3,9 +3,9 @@ sprint: 33
 title: "Parallel Execution and Step Dependencies"
 type: backend
 epic: 8
-status: planning
+status: in-progress
 created: 2026-02-20T19:59:05Z
-started: null
+started: 2026-02-20T20:39:31Z
 completed: null
 hours: null
 ---
