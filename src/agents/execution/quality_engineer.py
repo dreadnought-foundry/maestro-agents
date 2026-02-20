@@ -101,8 +101,16 @@ class QualityEngineerAgent:
                 "No ClaudeCodeExecutor provided. "
                 "Pass executor= to the constructor for real execution."
             )
-        return await self._executor.run(
+        result = await self._executor.run(
             prompt=prompt,
             working_dir=project_root,
             allowed_tools=self.ALLOWED_TOOLS,
         )
+        # Parse review verdict from output (QualityReviewGate requires this)
+        if result.output:
+            lower = result.output.lower()
+            if "approve" in lower:
+                result.review_verdict = "approve"
+            elif "request_changes" in lower or "request changes" in lower:
+                result.review_verdict = "request_changes"
+        return result

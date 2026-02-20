@@ -12,11 +12,26 @@ from src.execution.hooks import HookRegistry
 from src.execution.runner import RunResult, SprintRunner
 
 
-def create_default_registry() -> AgentRegistry:
-    """Create an AgentRegistry with mock agents registered for common step types.
+def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry:
+    """Create an AgentRegistry with real agents backed by ClaudeCodeExecutor."""
+    from src.agents.execution.claude_code import ClaudeCodeExecutor
+    from src.agents.execution.product_engineer import ProductEngineerAgent
+    from src.agents.execution.quality_engineer import QualityEngineerAgent
+    from src.agents.execution.test_runner import TestRunnerAgent
 
-    In production, you'd register real agents. This is for demos and testing.
-    """
+    executor = ClaudeCodeExecutor(model=model, max_turns=max_turns)
+    registry = AgentRegistry()
+    registry.register("implement", ProductEngineerAgent(executor=executor))
+    registry.register("write_code", ProductEngineerAgent(executor=executor))
+    registry.register("test", TestRunnerAgent(executor=executor))
+    registry.register("run_tests", TestRunnerAgent(executor=executor))
+    registry.register("review", QualityEngineerAgent(executor=executor))
+    registry.register("quality_review", QualityEngineerAgent(executor=executor))
+    return registry
+
+
+def create_test_registry() -> AgentRegistry:
+    """Create an AgentRegistry with mock agents for fast testing."""
     from src.agents.execution.mocks import (
         MockProductEngineerAgent,
         MockQualityEngineerAgent,
@@ -31,6 +46,10 @@ def create_default_registry() -> AgentRegistry:
     registry.register("review", MockQualityEngineerAgent())
     registry.register("quality_review", MockQualityEngineerAgent())
     return registry
+
+
+# Backwards compat alias
+create_default_registry = create_test_registry
 
 
 def create_hook_registry(
@@ -58,15 +77,15 @@ async def run_sprint(
     kanban_dir: Path | None = None,
     synthesizer=None,
     grooming_agent=None,
+    mock: bool = False,
 ) -> RunResult:
     """Convenience function to run a sprint with sensible defaults.
 
-    Creates default registries if none provided. When kanban_dir is set,
-    enables artifact generation, LLM synthesis, context filtering, and
-    automatic grooming on sprint completion.
+    Uses real ClaudeCodeExecutor agents by default. Pass mock=True for
+    fast testing without burning tokens.
     """
     if agent_registry is None:
-        agent_registry = create_default_registry()
+        agent_registry = create_registry() if not mock else create_test_registry()
 
     hook_registry = create_hook_registry(
         kanban_dir=kanban_dir, grooming_agent=grooming_agent,

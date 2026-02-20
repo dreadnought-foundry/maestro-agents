@@ -12,7 +12,7 @@ import asyncio
 import sys
 
 from src.adapters.memory import InMemoryAdapter
-from src.execution.convenience import create_default_registry, run_sprint
+from src.execution.convenience import run_sprint
 
 
 def main() -> None:
@@ -23,6 +23,8 @@ def main() -> None:
     run_parser.add_argument("sprint_id", help="Sprint ID to execute")
     run_parser.add_argument("--project-root", default=".", help="Project root path")
     run_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
+    run_parser.add_argument("--mock", action="store_true", help="Use mock agents (skip real execution)")
+    run_parser.add_argument("--model", default="sonnet", help="Claude model (default: sonnet)")
 
     status_parser = subparsers.add_parser("status", help="Show sprint status")
     status_parser.add_argument("sprint_id", help="Sprint ID to check")
@@ -66,6 +68,7 @@ async def _run_command(args) -> None:
             project_root=Path(args.project_root),
             on_progress=on_progress,
             kanban_dir=kanban_path,
+            mock=args.mock,
         )
         print(f"\nSprint {result.sprint_id}: {'SUCCESS' if result.success else 'FAILED'}")
         print(f"Steps: {result.steps_completed}/{result.steps_total}")

@@ -41,6 +41,8 @@ class TestCLIModuleImports:
 
         expected = [
             "RunConfig",
+            "create_registry",
+            "create_test_registry",
             "create_default_registry",
             "create_hook_registry",
             "run_sprint",
