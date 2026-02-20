@@ -11,6 +11,7 @@ from src.agents.execution.mocks import (
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
 from src.execution.convenience import (
+    create_registry,
     create_test_registry,
     create_hook_registry,
     run_sprint,
@@ -258,3 +259,145 @@ async def test_run_sprint_convenience_function():
 
     updated = await backend.get_sprint(sprint.id)
     assert updated.status is SprintStatus.DONE
+
+
+# ---------------------------------------------------------------------------
+# Sprint 26 regression tests — real registry wiring
+# ---------------------------------------------------------------------------
+
+
+async def test_create_registry_returns_real_agents():
+    """create_registry() wires real agents with ClaudeCodeExecutor."""
+    from src.agents.execution.product_engineer import ProductEngineerAgent
+    from src.agents.execution.quality_engineer import QualityEngineerAgent
+    from src.agents.execution.test_runner import TestRunnerAgent
+
+    registry = create_registry()
+    agents = registry.list_agents()
+
+    # Same step types as test registry
+    assert "implement" in agents
+    assert "write_code" in agents
+    assert "test" in agents
+    assert "run_tests" in agents
+    assert "review" in agents
+    assert "quality_review" in agents
+
+    # But real agent classes, not mocks
+    assert isinstance(agents["implement"], ProductEngineerAgent)
+    assert isinstance(agents["test"], TestRunnerAgent)
+    assert isinstance(agents["review"], QualityEngineerAgent)
+
+    # Each agent has an executor injected
+    assert agents["implement"]._executor is not None
+    assert agents["test"]._executor is not None
+    assert agents["review"]._executor is not None
+
+
+async def test_create_test_registry_returns_mock_agents():
+    """create_test_registry() returns mock agents, not real ones."""
+    registry = create_test_registry()
+    agents = registry.list_agents()
+
+    assert isinstance(agents["implement"], MockProductEngineerAgent)
+    assert isinstance(agents["test"], MockTestRunnerAgent)
+    assert isinstance(agents["review"], MockQualityEngineerAgent)
+
+
+async def test_run_sprint_mock_flag_uses_test_registry():
+    """run_sprint(mock=True) uses mock agents and completes fast."""
+    backend = InMemoryAdapter()
+    epic, sprint = await _setup_sprint(backend)
+
+    result = await run_sprint(sprint.id, backend=backend, mock=True)
+
+    assert result.success is True
+    assert result.steps_completed == 3
+
+
+async def test_quality_engineer_parses_approve_verdict():
+    """QualityEngineerAgent extracts review_verdict from output text."""
+    from unittest.mock import AsyncMock
+
+    from src.agents.execution.quality_engineer import QualityEngineerAgent
+
+    # Create a mock executor that returns output containing "approve"
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = AgentResult(
+        success=True,
+        output="Code review complete. Verdict: approve. All criteria met.",
+    )
+
+    agent = QualityEngineerAgent(executor=mock_executor)
+    context = _make_context()
+    result = await agent.execute(context)
+
+    assert result.review_verdict == "approve"
+
+
+async def test_quality_engineer_parses_request_changes_verdict():
+    """QualityEngineerAgent detects request_changes verdict."""
+    from unittest.mock import AsyncMock
+
+    from src.agents.execution.quality_engineer import QualityEngineerAgent
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = AgentResult(
+        success=True,
+        output="Issues found. Verdict: request_changes. Fix error handling.",
+    )
+
+    agent = QualityEngineerAgent(executor=mock_executor)
+    context = _make_context()
+    result = await agent.execute(context)
+
+    assert result.review_verdict == "request_changes"
+
+
+async def test_quality_engineer_no_verdict_in_output():
+    """QualityEngineerAgent leaves review_verdict as None if not found."""
+    from unittest.mock import AsyncMock
+
+    from src.agents.execution.quality_engineer import QualityEngineerAgent
+
+    mock_executor = AsyncMock()
+    mock_executor.run.return_value = AgentResult(
+        success=True,
+        output="Reviewed the code. Looks fine overall.",
+    )
+
+    agent = QualityEngineerAgent(executor=mock_executor)
+    context = _make_context()
+    result = await agent.execute(context)
+
+    assert result.review_verdict is None
+
+
+def _make_context():
+    """Create a minimal StepContext for testing."""
+    from pathlib import Path
+
+    from src.agents.execution.types import StepContext
+    from src.workflow.models import Epic, EpicStatus, Sprint, SprintStatus, Step
+
+    step = Step(id="s1", name="review")
+    sprint = Sprint(
+        id="test-sprint",
+        goal="Test sprint",
+        status=SprintStatus.IN_PROGRESS,
+        epic_id="test-epic",
+        steps=[step],
+    )
+    epic = Epic(
+        id="test-epic",
+        title="Test Epic",
+        description="Test epic",
+        status=EpicStatus.ACTIVE,
+        sprint_ids=["test-sprint"],
+    )
+    return StepContext(
+        step=step,
+        sprint=sprint,
+        epic=epic,
+        project_root=Path("."),
+    )
