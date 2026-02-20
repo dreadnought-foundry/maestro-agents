@@ -3,11 +3,11 @@ sprint: 35
 title: "End-to-End Integration"
 type: integration
 epic: 8
-status: in-progress
+status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T21:40:00Z
-completed: null
-hours: null
+completed: 2026-02-20T21:48:50Z
+hours: 0.1
 ---
 
 # Sprint 35: End-to-End Integration
