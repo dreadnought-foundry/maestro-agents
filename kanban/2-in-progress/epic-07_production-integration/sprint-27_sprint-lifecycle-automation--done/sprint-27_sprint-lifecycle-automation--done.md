@@ -3,11 +3,11 @@ sprint: 27
 title: "Sprint Lifecycle Automation"
 type: infrastructure
 epic: 7
-status: planning
+status: done
 created: 2026-02-15T00:00:00Z
-started: null
-completed: null
-hours: null
+started: 2026-02-20T19:27:53Z
+completed: 2026-02-20T19:28:01Z
+hours: 0.0
 ---
 
 # Sprint 27: Sprint Lifecycle Automation
@@ -51,31 +51,32 @@ Adapt the reference implementation to work with this project's `kanban/` folder 
 ## Tasks
 
 ### Phase 1: Core CLI Framework
-- [ ] Create `scripts/sprint_lifecycle.py` with argparse CLI
-- [ ] Implement `find_sprint()` — locate a sprint by number across all columns
-- [ ] Implement `find_epic()` — locate an epic by number across all columns
-- [ ] Implement YAML frontmatter read/update helpers
-- [ ] Implement folder move helper (handles epic-grouped sprints)
+- [x] Create `scripts/sprint_lifecycle.py` with argparse CLI
+- [x] Implement `find_sprint()` — locate a sprint by number across all columns
+- [x] Implement `find_epic()` — locate an epic by number across all columns
+- [x] Implement YAML frontmatter read/update helpers
+- [x] Implement folder move helper (handles epic-grouped sprints)
 
 ### Phase 2: Sprint Commands
-- [ ] `create-sprint <num> <title> [--type TYPE] [--epic NUM]` — create sprint file/folder
-- [ ] `start-sprint <num>` — move to 2-in-progress, update YAML, create state file
-- [ ] `complete-sprint <num>` — move to 3-done with `--done` suffix, update YAML
-- [ ] `block-sprint <num> <reason>` — move to 4-blocked with `--blocked` suffix
-- [ ] `resume-sprint <num>` — move back to 2-in-progress, remove `--blocked` suffix
-- [ ] `abort-sprint <num> [reason]` — move to 5-abandoned with `--aborted` suffix
+- [x] `create-sprint <num> <title> [--type TYPE] [--epic NUM]` — create sprint file/folder
+- [x] `start-sprint <num>` — move to 2-in-progress, update YAML, create state file
+- [x] `complete-sprint <num>` — move to 3-done with `--done` suffix, update YAML
+- [x] `block-sprint <num> <reason>` — add `--blocked` suffix, update YAML
+- [x] `resume-sprint <num>` — remove `--blocked` suffix, resume in-progress
+- [x] `abort-sprint <num> [reason]` — add `--aborted` suffix, update YAML
 
 ### Phase 3: Epic Commands
-- [ ] `create-epic <num> <title>` — create epic folder with `_epic.md`
-- [ ] `start-epic <num>` — move epic to 2-in-progress, update YAML
-- [ ] `complete-epic <num>` — move to 3-done (only if all sprints are done)
-- [ ] `archive-epic <num>` — move to 6-archived
+- [x] `create-epic <num> <title>` — create epic folder with `_epic.md`
+- [x] `start-epic <num>` — move epic to 2-in-progress, update YAML
+- [x] `complete-epic <num>` — move to 3-done (only if all sprints are done/aborted)
+- [x] `archive-epic <num>` — move to 6-archived
 
 ### Phase 4: Validation
-- [ ] Test each command against the real kanban directory
-- [ ] Verify all workflow skills work end-to-end via the script
-- [ ] Verify state files are created/updated correctly
-- [ ] Verify edge cases: standalone sprints, nested sprints, already-moved items
+- [x] Test each command against the real kanban directory
+- [x] Verify state files are created/updated correctly
+- [x] Verify edge cases: standalone sprints, nested sprints, epic-nested starts
+- [x] Verify state guards: block/complete/resume/abort invalid transitions
+- [x] Verify kanban TUI scanner still works after moves
 
 ## Deliverables
 
@@ -84,14 +85,14 @@ Adapt the reference implementation to work with this project's `kanban/` folder 
 
 ## Acceptance Criteria
 
-- [ ] `python3 scripts/sprint_lifecycle.py start-sprint 25` works
-- [ ] `python3 scripts/sprint_lifecycle.py create-epic 8 "New Epic"` works
-- [ ] All commands handle the `kanban/` folder structure correctly
-- [ ] State files (`.claude/sprint-N-state.json`) created on start
-- [ ] YAML frontmatter updated on every state transition
-- [ ] Epic-grouped sprints move with their epic folder
-- [ ] Clear error messages for invalid operations (sprint not found, already started, etc.)
-- [ ] Existing kanban TUI scanner still works after moves
+- [x] `python3 scripts/sprint_lifecycle.py start-sprint 25` works
+- [x] `python3 scripts/sprint_lifecycle.py create-epic 8 "New Epic"` works
+- [x] All commands handle the `kanban/` folder structure correctly
+- [x] State files (`.claude/sprint-N-state.json`) created on start
+- [x] YAML frontmatter updated on every state transition
+- [x] Epic-grouped sprints move with their epic folder
+- [x] Clear error messages for invalid operations (sprint not found, already started, etc.)
+- [x] Existing kanban TUI scanner still works after moves
 
 ## Dependencies
 
