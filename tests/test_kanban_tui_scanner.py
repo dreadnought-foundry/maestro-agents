@@ -17,11 +17,16 @@ from kanban_tui.scanner import (
     _status_from_name,
     parse_frontmatter,
     scan_kanban,
+    write_history_entry,
 )
 from kanban_tui.app import MAIN_COLUMNS
 
 
 ARTIFACT_SUFFIXES = ("_contracts", "_quality", "_postmortem", "_deferred")
+PLANNING_ARTIFACT_NAMES = (
+    "_planning_contracts", "_planning_team_plan", "_planning_tdd_strategy",
+    "_planning_coding_strategy", "_planning_context_brief",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +202,24 @@ class TestFindSprintMd:
         sprint_dir = tmp_path / "sprint-01_empty"
         sprint_dir.mkdir()
         assert _find_sprint_md(sprint_dir) is None
+
+    def test_skips_planning_artifacts(self, tmp_path):
+        """Planning artifact files (sprint-NN_planning_*.md) are skipped in prefix fallback."""
+        sprint_dir = tmp_path / "sprint-37_kanban-history"
+        sprint_dir.mkdir()
+        spec = sprint_dir / "sprint-37_kanban-history.md"
+        spec.write_text("---\nsprint: 37\ntitle: Kanban History\n---\n")
+        for pname in PLANNING_ARTIFACT_NAMES:
+            (sprint_dir / f"sprint-37{pname}.md").write_text(f"# {pname}\n")
+        assert _find_sprint_md(sprint_dir) == spec
+
+    def test_only_planning_artifacts_falls_back_to_first(self, tmp_path):
+        """If only planning artifact files exist (no spec), returns first as last resort."""
+        sprint_dir = tmp_path / "sprint-37_lost"
+        sprint_dir.mkdir()
+        (sprint_dir / "sprint-37_planning_contracts.md").write_text("# Contracts\n")
+        result = _find_sprint_md(sprint_dir)
+        assert result is not None
 
     def test_only_artifact_files_falls_back_to_first(self, tmp_path):
         """If only artifact files exist (no spec), returns first as last resort."""
@@ -670,6 +693,105 @@ class TestRealKanbanSanity:
         col_names = {c.name for c in columns}
         for main_col in MAIN_COLUMNS:
             assert main_col in col_names, f"Missing main column: {main_col}"
+
+
+# ---------------------------------------------------------------------------
+# History parsing and write_history_entry
+# ---------------------------------------------------------------------------
+
+class TestHistoryParsing:
+    def test_history_read_from_yaml(self, tmp_path):
+        """History array in YAML frontmatter is read into SprintInfo.history."""
+        _make_columns(tmp_path, "2-in-progress")
+        col = tmp_path / "2-in-progress"
+        sprint_dir = col / "sprint-50_history-test"
+        sprint_dir.mkdir()
+        md = sprint_dir / "sprint-50_history-test.md"
+        md.write_text(
+            "---\nsprint: 50\ntitle: History Test\ntype: backend\n"
+            "epic: null\ncreated: 2026-01-01T00:00:00Z\n"
+            "history:\n"
+            "- column: 1-todo\n  timestamp: '2026-01-01T00:00:00Z'\n"
+            "- column: 2-in-progress\n  timestamp: '2026-01-02T00:00:00Z'\n"
+            "---\n\n# Sprint\n"
+        )
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+        sprint = col_map["2-in-progress"].standalone_sprints[0]
+        assert len(sprint.history) == 2
+        assert sprint.history[0]["column"] == "1-todo"
+        assert sprint.history[1]["column"] == "2-in-progress"
+
+    def test_empty_history_defaults_to_empty_list(self, tmp_path):
+        """Sprint without history in YAML gets an empty list."""
+        _make_columns(tmp_path, "1-todo")
+        _write_sprint(tmp_path / "1-todo", 51, "No History", status="todo")
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+        sprint = col_map["1-todo"].standalone_sprints[0]
+        assert sprint.history == []
+
+    def test_write_history_entry_appends(self, tmp_path):
+        """write_history_entry appends a new entry to the YAML history."""
+        md = tmp_path / "sprint-52_test.md"
+        md.write_text(
+            "---\nsprint: 52\ntitle: Test\n---\n\n# Sprint\n"
+        )
+        write_history_entry(md, "2-in-progress")
+        fm = parse_frontmatter(md)
+        assert len(fm["history"]) == 1
+        assert fm["history"][0]["column"] == "2-in-progress"
+        assert "timestamp" in fm["history"][0]
+
+    def test_write_history_entry_appends_multiple(self, tmp_path):
+        """Multiple write_history_entry calls accumulate entries."""
+        md = tmp_path / "sprint-53_test.md"
+        md.write_text(
+            "---\nsprint: 53\ntitle: Test\n---\n\n# Sprint\n"
+        )
+        write_history_entry(md, "1-todo")
+        write_history_entry(md, "2-in-progress")
+        write_history_entry(md, "3-review")
+        fm = parse_frontmatter(md)
+        assert len(fm["history"]) == 3
+        assert [e["column"] for e in fm["history"]] == [
+            "1-todo", "2-in-progress", "3-review",
+        ]
+
+    def test_write_history_entry_removes_status_field(self, tmp_path):
+        """write_history_entry strips the old status field from YAML."""
+        md = tmp_path / "sprint-54_test.md"
+        md.write_text(
+            "---\nsprint: 54\ntitle: Test\nstatus: in-progress\n---\n\n# Sprint\n"
+        )
+        write_history_entry(md, "3-review")
+        fm = parse_frontmatter(md)
+        assert "status" not in fm
+        assert len(fm["history"]) == 1
+
+    def test_status_derived_from_done_suffix(self, tmp_path):
+        """Sprint with --done suffix gets status='done' regardless of YAML."""
+        _make_columns(tmp_path, "2-in-progress", "4-done")
+        _write_sprint(
+            tmp_path / "2-in-progress", 55, "Done Sprint",
+            status="in-progress", suffix="--done",
+        )
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+        sprint = col_map["4-done"].standalone_sprints[0]
+        assert sprint.status == "done"
+
+    def test_status_falls_back_to_yaml_without_suffix(self, tmp_path):
+        """Sprint without path suffix falls back to YAML status field."""
+        _make_columns(tmp_path, "2-in-progress")
+        _write_sprint(
+            tmp_path / "2-in-progress", 56, "Active Sprint",
+            status="in-progress",
+        )
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+        sprint = col_map["2-in-progress"].standalone_sprints[0]
+        assert sprint.status == "in-progress"
 
 
 # ---------------------------------------------------------------------------

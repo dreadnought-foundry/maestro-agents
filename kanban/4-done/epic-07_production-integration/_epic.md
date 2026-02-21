@@ -1,7 +1,6 @@
 ---
 epic: 7
 title: "Production Integration"
-status: planning
 created: 2026-02-15
 started: null
 completed: null

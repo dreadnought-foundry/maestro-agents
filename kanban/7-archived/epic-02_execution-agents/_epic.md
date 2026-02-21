@@ -1,7 +1,6 @@
 ---
 epic: 2
 title: "Execution Agents"
-status: done
 created: 2026-02-15
 started: null
 completed: null

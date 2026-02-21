@@ -20,6 +20,7 @@ from kanban_tui.scanner import (
     EpicInfo,
     SprintInfo,
     scan_kanban,
+    write_history_entry,
 )
 
 # Epic color palette
@@ -232,10 +233,23 @@ class MoveScreen(ModalScreen[str | None]):
             parent = sprint.movable_path.parent
             if parent.name.startswith("epic-"):
                 shutil.move(str(parent), str(target_dir / parent.name))
+                # Record history for the moved sprint
+                new_md = target_dir / parent.name / sprint.movable_path.name / sprint.path.name
+                if not new_md.exists():
+                    new_md = target_dir / parent.name / sprint.path.relative_to(parent)
+                if new_md.exists():
+                    write_history_entry(new_md, target_col)
             else:
                 # Standalone sprint — move just the sprint
                 src = sprint.movable_path
                 shutil.move(str(src), str(target_dir / src.name))
+                # Record history for the moved sprint
+                if sprint.is_folder:
+                    new_md = target_dir / src.name / sprint.path.name
+                else:
+                    new_md = target_dir / src.name
+                if new_md.exists():
+                    write_history_entry(new_md, target_col)
 
         self.dismiss(target_col)
 
@@ -664,6 +678,7 @@ class KanbanApp(App):
             self.notify(f"S-{sprint.number:02d} completed!", severity="information")
         except Exception:
             # Fallback to filesystem operations if adapter fails
+            write_history_entry(sprint.path, "4-done")
             src = sprint.movable_path
             parent = src.parent
             if parent.name.startswith("epic-"):
@@ -716,6 +731,7 @@ class KanbanApp(App):
                 asyncio.get_event_loop().create_task(backend.reject_sprint(sprint_id, reason))
             except Exception:
                 # Fallback to filesystem operations
+                write_history_entry(sprint.path, "2-in-progress")
                 src = sprint.movable_path
                 parent = src.parent
                 target = self.kanban_dir / "2-in-progress"

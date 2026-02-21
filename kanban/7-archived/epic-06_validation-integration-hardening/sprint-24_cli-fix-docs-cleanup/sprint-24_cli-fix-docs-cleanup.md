@@ -3,7 +3,6 @@ sprint: 24
 title: "CLI Fix & Kanban Doc Cleanup"
 type: backend
 epic: 6
-status: done
 created: 2026-02-15T00:00:00Z
 started: 2026-02-15
 completed: 2026-02-15

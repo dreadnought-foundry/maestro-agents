@@ -3,7 +3,6 @@ sprint: 9
 title: "Step Models and Status Tracking"
 type: backend
 epic: 1
-status: done
 created: 2026-02-15T00:00:00Z
 started: null
 completed: null

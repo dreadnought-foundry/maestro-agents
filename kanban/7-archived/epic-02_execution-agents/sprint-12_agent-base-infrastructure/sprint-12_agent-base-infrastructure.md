@@ -3,7 +3,6 @@ sprint: 12
 title: "Agent Base Infrastructure"
 type: backend
 epic: 2
-status: done
 created: 2026-02-15T00:00:00Z
 started: null
 completed: null

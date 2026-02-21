@@ -3,7 +3,6 @@ sprint: 19
 title: "Hook System Architecture"
 type: backend
 epic: 4
-status: done
 created: 2026-02-15T00:00:00Z
 started: null
 completed: null

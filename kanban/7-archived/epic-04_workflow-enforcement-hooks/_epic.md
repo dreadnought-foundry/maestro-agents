@@ -1,7 +1,6 @@
 ---
 epic: 4
 title: "Workflow Enforcement Hooks"
-status: done
 created: 2026-02-15
 started: null
 completed: null

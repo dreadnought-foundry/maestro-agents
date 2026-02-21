@@ -3,7 +3,6 @@ sprint: 21
 title: "End-to-End Integration and CLI"
 type: backend
 epic: 4
-status: done
 created: 2026-02-15T00:00:00Z
 started: null
 completed: null

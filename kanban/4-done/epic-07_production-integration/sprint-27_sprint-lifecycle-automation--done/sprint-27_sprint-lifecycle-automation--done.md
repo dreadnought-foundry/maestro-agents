@@ -3,7 +3,6 @@ sprint: 27
 title: "Sprint Lifecycle Automation"
 type: infrastructure
 epic: 7
-status: done
 created: 2026-02-15T00:00:00Z
 started: 2026-02-20T19:27:53Z
 completed: 2026-02-20T19:28:01Z

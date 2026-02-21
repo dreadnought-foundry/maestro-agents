@@ -157,7 +157,8 @@ class PlanningAgent:
             # Write artifacts to sprint folder
             sprint_dir = self._find_sprint_dir(context)
             if sprint_dir:
-                files = artifacts.write_to_dir(sprint_dir)
+                sprint_prefix = self._sprint_prefix(context)
+                files = artifacts.write_to_dir(sprint_dir, sprint_prefix=sprint_prefix)
                 result.files_created = [str(f) for f in files]
 
             result.output = f"Planning complete. Produced {len(ARTIFACT_NAMES)} artifacts."
@@ -206,6 +207,15 @@ class PlanningAgent:
             deferred_section=deferred_section,
             postmortem_section=postmortem_section,
         )
+
+    @staticmethod
+    def _sprint_prefix(context: StepContext) -> str | None:
+        """Derive a ``sprint-NN`` prefix from the sprint id (e.g. ``"s-29"`` → ``"sprint-29"``)."""
+        import re
+        num_match = re.search(r"(\d+)", context.sprint.id)
+        if not num_match:
+            return None
+        return f"sprint-{int(num_match.group(1)):02d}"
 
     def _find_sprint_dir(self, context: StepContext) -> Path | None:
         """Find the sprint's artifact directory."""

@@ -3,7 +3,6 @@ sprint: 36
 title: "Kanban TUI Split Rendering"
 type: frontend
 epic: 8
-status: done
 created: 2026-02-20T20:29:16Z
 started: 2026-02-20T20:41:17Z
 completed: 2026-02-20T21:24:27Z

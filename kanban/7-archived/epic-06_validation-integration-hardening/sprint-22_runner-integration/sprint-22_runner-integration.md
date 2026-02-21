@@ -3,7 +3,6 @@ sprint: 22
 title: "Runner Integration — Wire Dependencies, Hooks, and Retry"
 type: backend
 epic: 6
-status: done
 created: 2026-02-15T00:00:00Z
 started: 2026-02-15
 completed: 2026-02-15

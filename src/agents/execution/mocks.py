@@ -56,16 +56,29 @@ class MockPlanningAgent:
             f"### CONTEXT_BRIEF\n{self._artifacts.context_brief}"
         )
 
+        # Derive sprint prefix for realistic file names
+        import re
+        sprint_prefix = None
+        if context.sprint and context.sprint.id:
+            num_match = re.search(r"(\d+)", context.sprint.id)
+            if num_match:
+                sprint_prefix = f"sprint-{int(num_match.group(1)):02d}"
+
+        if sprint_prefix:
+            files = [f"{sprint_prefix}_planning_{n}.md" for n in (
+                "contracts", "team_plan", "tdd_strategy",
+                "coding_strategy", "context_brief",
+            )]
+        else:
+            files = [f"_planning_{n}.md" for n in (
+                "contracts", "team_plan", "tdd_strategy",
+                "coding_strategy", "context_brief",
+            )]
+
         return AgentResult(
             success=True,
             output=output,
-            files_created=[
-                "_planning_contracts.md",
-                "_planning_team_plan.md",
-                "_planning_tdd_strategy.md",
-                "_planning_coding_strategy.md",
-                "_planning_context_brief.md",
-            ],
+            files_created=files,
         )
 
 

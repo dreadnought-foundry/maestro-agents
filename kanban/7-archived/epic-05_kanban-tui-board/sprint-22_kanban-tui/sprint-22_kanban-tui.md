@@ -3,7 +3,6 @@ sprint: 22
 title: "Kanban TUI Application"
 type: tooling
 epic: 5
-status: in-progress
 created: 2026-02-15T00:00:00Z
 started: 2026-02-15T00:00:00Z
 completed: null

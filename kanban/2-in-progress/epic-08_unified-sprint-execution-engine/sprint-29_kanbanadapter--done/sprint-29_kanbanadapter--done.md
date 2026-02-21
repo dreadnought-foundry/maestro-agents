@@ -3,7 +3,6 @@ sprint: 29
 title: "KanbanAdapter"
 type: backend
 epic: 8
-status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T20:13:23Z
 completed: 2026-02-20T20:19:52Z

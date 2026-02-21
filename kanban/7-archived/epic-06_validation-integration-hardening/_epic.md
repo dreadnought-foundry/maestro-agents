@@ -1,7 +1,6 @@
 ---
 epic: 6
 title: "Phase 2 Validation & Integration Hardening"
-status: done
 created: 2026-02-15
 started: 2026-02-15
 completed: 2026-02-15

@@ -1,7 +1,6 @@
 ---
 epic: 5
 title: "Kanban TUI Board"
-status: in-progress
 created: 2026-02-15
 started: 2026-02-15
 completed: null

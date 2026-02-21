@@ -3,7 +3,6 @@ sprint: 30
 title: "Review Column and Rejection Flow"
 type: infrastructure
 epic: 8
-status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T20:20:45Z
 completed: 2026-02-20T20:39:05Z

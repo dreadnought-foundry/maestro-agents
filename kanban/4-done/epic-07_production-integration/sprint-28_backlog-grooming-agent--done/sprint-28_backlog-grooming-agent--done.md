@@ -3,7 +3,6 @@ sprint: 28
 title: "Backlog Grooming Agent"
 type: backend
 epic: 7
-status: done
 created: 2026-02-20T19:35:05Z
 started: 2026-02-20T19:35:09Z
 completed: 2026-02-20T19:35:35Z

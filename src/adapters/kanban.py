@@ -26,6 +26,11 @@ from ..workflow.models import (
 )
 from ..workflow.transitions import validate_transition
 
+# Lazy import to avoid circular dependency at module level
+def _write_history(md_path, column):
+    from kanban_tui.scanner import write_history_entry
+    write_history_entry(md_path, column)
+
 COLUMNS = [
     "0-backlog", "1-todo", "2-in-progress", "3-review",
     "4-done", "5-blocked", "6-abandoned", "7-archived",
@@ -518,7 +523,8 @@ completed: null
         ))
 
         # Update filesystem
-        _update_yaml(path, status="in-progress", started=_now_iso())
+        _update_yaml(path, started=_now_iso())
+        _write_history(path, "2-in-progress")
         col = _column_of(path)
         if col != "2-in-progress":
             path = _move_to_column(path, self._kanban_dir, "2-in-progress")
@@ -599,7 +605,8 @@ completed: null
         ))
 
         # Update filesystem
-        _update_yaml(path, status="done", completed=_now_iso())
+        _update_yaml(path, completed=_now_iso())
+        _write_history(path, "4-done")
         path = _add_suffix(path, "done")
 
         in_epic, _ = _is_in_epic(path)
@@ -635,7 +642,7 @@ completed: null
         ))
 
         # Update filesystem
-        _update_yaml(path, status="review")
+        _write_history(path, "3-review")
         col = _column_of(path)
         if col != "3-review":
             path = _move_to_column(path, self._kanban_dir, "3-review")
@@ -664,7 +671,8 @@ completed: null
         ))
 
         # Update filesystem
-        _update_yaml(path, status="in-progress", rejection_reason=reason, rejected_at=_now_iso())
+        _update_yaml(path, rejection_reason=reason, rejected_at=_now_iso())
+        _write_history(path, "2-in-progress")
         col = _column_of(path)
         if col != "2-in-progress":
             path = _move_to_column(path, self._kanban_dir, "2-in-progress")
@@ -698,7 +706,8 @@ completed: null
         ))
 
         # Update filesystem
-        _update_yaml(path, status="blocked", blocked_at=_now_iso(), blocker=reason)
+        _update_yaml(path, blocked_at=_now_iso(), blocker=reason)
+        _write_history(path, "5-blocked")
         _add_suffix(path, "blocked")
 
         # Update state file

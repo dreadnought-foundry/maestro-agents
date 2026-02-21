@@ -1,5 +1,7 @@
 """Tests for PlanningAgent, PlanningArtifacts, and MockPlanningAgent."""
 
+import re
+
 import pytest
 from pathlib import Path
 
@@ -8,6 +10,9 @@ from src.agents.execution.planning_agent import PlanningAgent, _parse_artifacts
 from src.agents.execution.types import AgentResult, StepContext
 from src.execution.planning_artifacts import ARTIFACT_NAMES, PlanningArtifacts
 from src.workflow.models import Epic, EpicStatus, Sprint, SprintStatus, Step, StepStatus
+
+# Canonical regex for sprint-prefixed planning artifact filenames
+_PLANNING_FILENAME_RE = re.compile(r"^sprint-\d{2,}_planning_[a-z_]+\.md$")
 
 
 def _make_context(tmp_path: Path) -> StepContext:
@@ -77,6 +82,38 @@ class TestPlanningArtifacts:
     def test_read_from_dir_returns_none_if_missing(self, tmp_path):
         assert PlanningArtifacts.read_from_dir(tmp_path) is None
 
+    def test_write_and_read_roundtrip_with_sprint_prefix(self, tmp_path):
+        artifacts = PlanningArtifacts(
+            contracts="interface Foo",
+            team_plan="2 agents",
+            tdd_strategy="test all",
+            coding_strategy="use protocols",
+            context_brief="python project",
+        )
+        paths = artifacts.write_to_dir(tmp_path, sprint_prefix="sprint-37")
+        assert len(paths) == 5
+        for p in paths:
+            assert p.exists()
+            assert p.name.startswith("sprint-37_planning_")
+
+        loaded = PlanningArtifacts.read_from_dir(tmp_path, sprint_prefix="sprint-37")
+        assert loaded is not None
+        assert loaded.contracts == "interface Foo"
+        assert loaded.team_plan == "2 agents"
+
+    def test_read_from_dir_falls_back_to_legacy(self, tmp_path):
+        """read_from_dir with sprint_prefix still finds legacy _planning_*.md files."""
+        artifacts = PlanningArtifacts(
+            contracts="c", team_plan="t", tdd_strategy="d",
+            coding_strategy="s", context_brief="b",
+        )
+        # Write with legacy naming (no prefix)
+        artifacts.write_to_dir(tmp_path)
+        # Read with sprint_prefix — should fall back to legacy files
+        loaded = PlanningArtifacts.read_from_dir(tmp_path, sprint_prefix="sprint-99")
+        assert loaded is not None
+        assert loaded.contracts == "c"
+
     def test_to_context_string(self):
         artifacts = PlanningArtifacts(
             contracts="interface A",
@@ -95,6 +132,47 @@ class TestPlanningArtifacts:
         assert len(ARTIFACT_NAMES) == 5
         assert "contracts" in ARTIFACT_NAMES
         assert "context_brief" in ARTIFACT_NAMES
+
+
+# ---------------------------------------------------------------------------
+# Naming convention enforcement
+# ---------------------------------------------------------------------------
+class TestPlanningArtifactNamingConvention:
+    """Every planning artifact filename must match sprint-NN_planning_{name}.md."""
+
+    _FULL_ARTIFACTS = PlanningArtifacts(
+        contracts="c", team_plan="t", tdd_strategy="d",
+        coding_strategy="s", context_brief="b",
+    )
+
+    @pytest.mark.parametrize("sprint_prefix", [
+        "sprint-01", "sprint-09", "sprint-37", "sprint-100",
+    ])
+    def test_write_to_dir_filenames_match_convention(self, tmp_path, sprint_prefix):
+        paths = self._FULL_ARTIFACTS.write_to_dir(tmp_path, sprint_prefix=sprint_prefix)
+        for p in paths:
+            assert _PLANNING_FILENAME_RE.match(p.name), (
+                f"Filename {p.name!r} does not match convention "
+                f"sprint-NN_planning_{{name}}.md"
+            )
+
+    @pytest.mark.parametrize("artifact_name", ARTIFACT_NAMES)
+    def test_each_artifact_name_produces_valid_filename(self, tmp_path, artifact_name):
+        expected = f"sprint-37_planning_{artifact_name}.md"
+        paths = self._FULL_ARTIFACTS.write_to_dir(tmp_path, sprint_prefix="sprint-37")
+        names = [p.name for p in paths]
+        assert expected in names, f"Expected {expected!r} in {names}"
+        assert _PLANNING_FILENAME_RE.match(expected)
+
+    async def test_mock_agent_filenames_match_convention(self, tmp_path):
+        """MockPlanningAgent.files_created must follow the naming convention."""
+        agent = MockPlanningAgent()
+        context = _make_context(tmp_path)
+        result = await agent.execute(context)
+        for filename in result.files_created:
+            assert _PLANNING_FILENAME_RE.match(filename), (
+                f"Mock filename {filename!r} does not match convention"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +230,9 @@ class TestMockPlanningAgent:
         result = await agent.execute(context)
         assert result.success
         assert len(result.files_created) == 5
+        # Sprint id "s-1" → files should use "sprint-01_planning_" prefix
+        for f in result.files_created:
+            assert f.startswith("sprint-01_planning_"), f"unexpected filename: {f}"
 
     async def test_output_is_parseable(self, tmp_path):
         agent = MockPlanningAgent()

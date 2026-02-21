@@ -1,7 +1,6 @@
 ---
 epic: 3
 title: "Sprint Runner Orchestrator"
-status: done
 created: 2026-02-15
 started: null
 completed: null

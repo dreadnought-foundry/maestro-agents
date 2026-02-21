@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -20,6 +21,7 @@ class SprintInfo:
     movable_path: Path  # the folder or file to move
     is_folder: bool
     raw_frontmatter: dict = field(default_factory=dict)
+    history: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -81,7 +83,7 @@ def _find_sprint_md(sprint_dir: Path) -> Path | None:
     if prefix_match:
         prefix = prefix_match.group(1)
         for md in md_files:
-            if md.name.startswith(prefix) and not any(
+            if md.name.startswith(prefix) and "_planning_" not in md.stem and not any(
                 md.stem.endswith(suffix)
                 for suffix in ("_contracts", "_quality", "_postmortem", "_deferred")
             ):
@@ -113,16 +115,21 @@ def _parse_sprint_md(md_path: Path, movable_path: Path, is_folder: bool) -> Spri
         number = _number_from_filename(md_path.name)
     if number is None:
         return None
+
+    # Derive status from filesystem path, falling back to YAML for backward compat
+    status = _status_from_name(movable_path.name) or fm.get("status", "unknown")
+
     return SprintInfo(
         number=int(number),
         title=fm.get("title", _title_from_filename(md_path.name)),
-        status=fm.get("status", "unknown"),
+        status=status,
         sprint_type=fm.get("type", ""),
         epic_number=fm.get("epic"),
         path=md_path,
         movable_path=movable_path,
         is_folder=is_folder,
         raw_frontmatter=fm,
+        history=fm.get("history", []),
     )
 
 
@@ -169,6 +176,29 @@ def _status_from_name(name: str) -> str | None:
     if "--blocked" in name:
         return "blocked"
     return None
+
+
+def write_history_entry(md_path: Path, column: str) -> None:
+    """Append a column-transition entry to YAML frontmatter history."""
+    text = md_path.read_text(encoding="utf-8")
+    match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not match:
+        return
+
+    fm = yaml.safe_load(match.group(1)) or {}
+    history = fm.get("history", [])
+    history.append({
+        "column": column,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    fm["history"] = history
+
+    # Remove status field if present (superseded by history)
+    fm.pop("status", None)
+
+    new_yaml = yaml.dump(fm, default_flow_style=False, sort_keys=False).rstrip("\n")
+    new_text = f"---\n{new_yaml}\n---{text[match.end():]}"
+    md_path.write_text(new_text, encoding="utf-8")
 
 
 def _sprint_display_column(sprint: SprintInfo, physical_col: str) -> str:

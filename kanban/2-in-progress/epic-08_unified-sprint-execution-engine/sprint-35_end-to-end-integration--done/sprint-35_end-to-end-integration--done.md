@@ -3,7 +3,6 @@ sprint: 35
 title: "End-to-End Integration"
 type: integration
 epic: 8
-status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T21:40:00Z
 completed: 2026-02-20T21:48:50Z

@@ -456,3 +456,104 @@ class TestFullLifecycle:
         assert fetched.status is SprintStatus.IN_PROGRESS
         assert len(fetched.steps) == 1
         assert fetched.steps[0].status is StepStatus.IN_PROGRESS
+
+
+# ---------------------------------------------------------------------------
+# Standalone sprints (no epic)
+# ---------------------------------------------------------------------------
+
+def _make_standalone_sprint(kanban_dir, sprint_num=37, title="Solo Sprint", tasks=None):
+    """Create a standalone sprint folder in 1-todo (no epic)."""
+    slug = title.lower().replace(" ", "-")
+    sprint_dir = kanban_dir / "1-todo" / f"sprint-{sprint_num:02d}_{slug}"
+    sprint_dir.mkdir(parents=True, exist_ok=True)
+    md = sprint_dir / f"sprint-{sprint_num:02d}_{slug}.md"
+    task_lines = ""
+    if tasks:
+        task_lines = "\n".join(f"- [ ] {t['name']}" for t in tasks)
+    md.write_text(
+        f"---\nsprint: {sprint_num}\ntitle: \"{title}\"\ntype: refactor\n"
+        f"epic: null\ncreated: 2026-02-21T00:00:00Z\n"
+        "started: null\ncompleted: null\n---\n\n"
+        f"# Sprint {sprint_num}: {title}\n\n## Tasks\n\n{task_lines}\n"
+    )
+    return f"s-{sprint_num}"
+
+
+class TestStandaloneSprintLifecycle:
+    """Tests for standalone sprints (epic: null) through the full lifecycle."""
+
+    async def test_get_standalone_sprint(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "Work"}])
+        sprint = await adapter.get_sprint(sprint_id)
+        assert sprint.goal == "Solo Sprint"
+        assert sprint.status is SprintStatus.TODO
+
+    async def test_standalone_sprint_has_empty_epic_id(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir)
+        sprint = await adapter.get_sprint(sprint_id)
+        # epic_id should be empty string or falsy, not raise
+        assert not sprint.epic_id or sprint.epic_id == "null"
+
+    async def test_start_standalone_sprint(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "A"}])
+        result = await adapter.start_sprint(sprint_id)
+        assert result.status is SprintStatus.IN_PROGRESS
+
+    async def test_start_standalone_moves_to_in_progress(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint_id)
+        matches = list(kanban_dir.glob("2-in-progress/sprint-37_*"))
+        assert len(matches) >= 1
+
+    async def test_standalone_full_lifecycle(self, adapter, kanban_dir):
+        """start → advance → review → complete for a standalone sprint."""
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "Build"}])
+        sprint = await adapter.start_sprint(sprint_id)
+        assert sprint.status is SprintStatus.IN_PROGRESS
+
+        sprint = await adapter.advance_step(sprint_id)
+        assert sprint.steps[0].status is StepStatus.DONE
+
+        sprint = await adapter.move_to_review(sprint_id)
+        assert sprint.status is SprintStatus.REVIEW
+
+        sprint = await adapter.complete_sprint(sprint_id)
+        assert sprint.status is SprintStatus.DONE
+
+    async def test_standalone_block_and_resume(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "Work"}])
+        await adapter.start_sprint(sprint_id)
+        result = await adapter.block_sprint(sprint_id, reason="Blocked on dep")
+        assert result.status is SprintStatus.BLOCKED
+
+    async def test_standalone_reject_flow(self, adapter, kanban_dir):
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "Code"}])
+        await adapter.start_sprint(sprint_id)
+        await adapter.advance_step(sprint_id)
+        await adapter.move_to_review(sprint_id)
+        result = await adapter.reject_sprint(sprint_id, reason="Needs work")
+        assert result.status is SprintStatus.IN_PROGRESS
+
+    async def test_list_sprints_includes_standalone(self, adapter, kanban_dir):
+        _make_standalone_sprint(kanban_dir)
+        sprints = await adapter.list_sprints()
+        nums = [int(s.id.split("-")[1]) for s in sprints]
+        assert 37 in nums
+
+    async def test_standalone_sprint_history_recorded(self, adapter, kanban_dir):
+        """History entries are written during lifecycle transitions."""
+        sprint_id = _make_standalone_sprint(kanban_dir, tasks=[{"name": "A"}])
+        await adapter.start_sprint(sprint_id)
+
+        from kanban_tui.scanner import parse_frontmatter
+        # Find the sprint file after it moved to in-progress
+        matches = list(kanban_dir.glob("2-in-progress/sprint-37_*/*.md"))
+        sprint_md = [m for m in matches if "_contracts" not in m.name
+                     and "_quality" not in m.name
+                     and "_postmortem" not in m.name
+                     and "_deferred" not in m.name][0]
+        fm = parse_frontmatter(sprint_md)
+        assert "history" in fm
+        assert len(fm["history"]) >= 1
+        assert fm["history"][-1]["column"] == "2-in-progress"

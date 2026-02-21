@@ -3,7 +3,6 @@ sprint: 34
 title: "Validation Phase"
 type: backend
 epic: 8
-status: done
 created: 2026-02-20T19:59:05Z
 started: 2026-02-20T21:25:12Z
 completed: 2026-02-20T21:38:31Z

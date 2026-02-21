@@ -42,27 +42,47 @@ class PlanningArtifacts:
             if not getattr(self, name).strip()
         ]
 
-    def write_to_dir(self, sprint_dir: Path) -> list[Path]:
-        """Write each artifact as a markdown file in the sprint directory."""
+    def write_to_dir(self, sprint_dir: Path, sprint_prefix: str | None = None) -> list[Path]:
+        """Write each artifact as a markdown file in the sprint directory.
+
+        If *sprint_prefix* is given (e.g. ``"sprint-37"``), files are named
+        ``sprint-37_planning_contracts.md``.  Without a prefix the legacy
+        ``_planning_contracts.md`` pattern is used for backward compatibility.
+        """
         sprint_dir.mkdir(parents=True, exist_ok=True)
         paths = []
         for name in ARTIFACT_NAMES:
             content = getattr(self, name)
-            path = sprint_dir / f"_planning_{name}.md"
+            if sprint_prefix:
+                filename = f"{sprint_prefix}_planning_{name}.md"
+            else:
+                filename = f"_planning_{name}.md"
+            path = sprint_dir / filename
             path.write_text(content)
             paths.append(path)
         return paths
 
     @classmethod
-    def read_from_dir(cls, sprint_dir: Path) -> PlanningArtifacts | None:
-        """Read planning artifacts from a sprint directory. Returns None if not found."""
+    def read_from_dir(cls, sprint_dir: Path, sprint_prefix: str | None = None) -> PlanningArtifacts | None:
+        """Read planning artifacts from a sprint directory. Returns None if not found.
+
+        Tries the new ``sprint-NN_planning_*.md`` naming first (when *sprint_prefix*
+        is provided), then falls back to the legacy ``_planning_*.md`` pattern.
+        """
         fields = {}
         for name in ARTIFACT_NAMES:
-            path = sprint_dir / f"_planning_{name}.md"
-            if path.exists():
-                fields[name] = path.read_text()
-            else:
+            path = None
+            if sprint_prefix:
+                candidate = sprint_dir / f"{sprint_prefix}_planning_{name}.md"
+                if candidate.exists():
+                    path = candidate
+            if path is None:
+                legacy = sprint_dir / f"_planning_{name}.md"
+                if legacy.exists():
+                    path = legacy
+            if path is None:
                 return None
+            fields[name] = path.read_text()
         return cls(**fields)
 
     def to_context_string(self) -> str:

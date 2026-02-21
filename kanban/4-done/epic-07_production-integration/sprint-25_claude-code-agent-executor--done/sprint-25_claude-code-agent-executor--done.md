@@ -3,7 +3,6 @@ sprint: 25
 title: "Claude Code Agent Executor"
 type: backend
 epic: 7
-status: done
 created: 2026-02-15T00:00:00Z
 started: 2026-02-15T00:00:00Z
 completed: 2026-02-20T19:28:01Z

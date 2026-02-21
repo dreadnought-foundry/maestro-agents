@@ -1,7 +1,6 @@
 ---
 epic: 8
 title: "Unified Sprint Execution Engine"
-status: planning
 created: 2026-02-20
 started: null
 completed: null

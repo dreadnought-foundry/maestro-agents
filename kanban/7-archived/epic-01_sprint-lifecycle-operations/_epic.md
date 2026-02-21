@@ -1,7 +1,6 @@
 ---
 epic: 1
 title: "Sprint Lifecycle Operations"
-status: done
 created: 2026-02-15
 started: null
 completed: null

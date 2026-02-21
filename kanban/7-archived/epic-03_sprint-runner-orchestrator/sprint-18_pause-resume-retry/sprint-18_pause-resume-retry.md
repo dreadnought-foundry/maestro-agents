@@ -3,7 +3,6 @@ sprint: 18
 title: "Pause, Resume, and Retry Logic"
 type: backend
 epic: 3
-status: done
 created: 2026-02-15T00:00:00Z
 started: null
 completed: null
