@@ -260,6 +260,50 @@ class TestScanKanban:
         sprint_nums = [s.number for s in col_map["2-in-progress"].epics[0].sprints]
         assert sprint_nums == sorted(sprint_nums)
 
+    def test_sprint_with_artifact_files_picks_correct_md(self, tmp_path):
+        """When a sprint folder has artifact files alongside the spec, scanner reads the spec."""
+        done_col = tmp_path / "4-done"
+        done_col.mkdir()
+
+        epic_dir = _write_epic(done_col, epic_num=7, title="Production")
+        sprint_dir = _write_sprint(
+            epic_dir, 29, "KanbanAdapter", status="done", epic_num=7, suffix="--done",
+        )
+
+        # Add artifact files that sort alphabetically before the spec
+        (sprint_dir / "sprint-29_contracts.md").write_text("# Contracts\n")
+        (sprint_dir / "sprint-29_deferred.md").write_text("# Deferred\n")
+        (sprint_dir / "sprint-29_postmortem.md").write_text("# Postmortem\n")
+        (sprint_dir / "sprint-29_quality.md").write_text("# Quality\n")
+
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+
+        done_epics = {e.number: e for e in col_map["4-done"].epics}
+        assert 7 in done_epics
+        sprint = done_epics[7].sprints[0]
+        assert sprint.number == 29
+        assert sprint.title == "KanbanAdapter"  # NOT "Contracts" or "Quality"
+        assert sprint.status == "done"
+
+    def test_standalone_sprint_with_artifacts_picks_correct_md(self, tmp_path):
+        """Standalone sprint folder with artifacts reads the spec, not an artifact."""
+        done_col = tmp_path / "4-done"
+        done_col.mkdir()
+
+        sprint_dir = _write_sprint(
+            done_col, 10, "My Feature", status="done", suffix="--done",
+        )
+        (sprint_dir / "sprint-10_contracts.md").write_text("# Contracts\n")
+        (sprint_dir / "sprint-10_quality.md").write_text("# Quality\n")
+
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+
+        sprint = col_map["4-done"].standalone_sprints[0]
+        assert sprint.number == 10
+        assert sprint.title == "My Feature"
+
 
 # ---------------------------------------------------------------------------
 # MAIN_COLUMNS constant

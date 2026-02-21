@@ -58,6 +58,39 @@ def parse_frontmatter(filepath: Path) -> dict:
         return {}
 
 
+def _find_sprint_md(sprint_dir: Path) -> Path | None:
+    """Find the primary sprint .md file in a sprint folder.
+
+    Prefers the file whose name matches the folder name (ignoring --done/--blocked
+    suffixes). Falls back to a file starting with the sprint prefix (e.g. sprint-29_).
+    Skips artifact files like _contracts.md, _quality.md, _postmortem.md, _deferred.md.
+    """
+    folder_stem = re.sub(r"--(done|blocked)$", "", sprint_dir.name)
+    md_files = list(sprint_dir.glob("*.md"))
+    if not md_files:
+        return None
+
+    # Best match: filename stem matches folder name (with or without suffix)
+    for md in md_files:
+        md_stem = re.sub(r"--(done|blocked)$", "", md.stem)
+        if md_stem == folder_stem:
+            return md
+
+    # Fallback: file starting with the sprint prefix (sprint-NN_)
+    prefix_match = re.match(r"(sprint-\d+_)", sprint_dir.name)
+    if prefix_match:
+        prefix = prefix_match.group(1)
+        for md in md_files:
+            if md.name.startswith(prefix) and not any(
+                md.stem.endswith(suffix)
+                for suffix in ("_contracts", "_quality", "_postmortem", "_deferred")
+            ):
+                return md
+
+    # Last resort: first .md file
+    return md_files[0]
+
+
 def _number_from_filename(name: str) -> int | None:
     """Extract sprint number from a filename like 'sprint-09_step-models.md'."""
     m = re.match(r"sprint-(\d+)", name)
@@ -194,9 +227,9 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
                     all_epics[epic.number] = (epic, col_name)
 
             elif entry.is_dir() and entry.name.startswith("sprint-"):
-                md_files = list(entry.glob("*.md"))
-                if md_files:
-                    sprint = _parse_sprint_md(md_files[0], movable_path=entry, is_folder=True)
+                md_file = _find_sprint_md(entry)
+                if md_file:
+                    sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True)
                     if sprint:
                         all_standalone.append((sprint, col_name))
 
@@ -286,9 +319,9 @@ def _scan_epic(epic_dir: Path) -> EpicInfo | None:
 
         # Sprint as subfolder
         if entry.is_dir() and entry.name.startswith("sprint-"):
-            md_files = list(entry.glob("*.md"))
-            if md_files:
-                sprint = _parse_sprint_md(md_files[0], movable_path=entry, is_folder=True)
+            md_file = _find_sprint_md(entry)
+            if md_file:
+                sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True)
                 if sprint:
                     epic.sprints.append(sprint)
 
