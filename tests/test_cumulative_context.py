@@ -209,8 +209,8 @@ class TestRunnerCumulativeContext:
             tasks=[{"name": "test"}],
         )
 
-        from src.agents.execution.mocks import MockTestRunnerAgent
-        agent = MockTestRunnerAgent()
+        from src.agents.execution.mocks import MockSuiteRunnerAgent
+        agent = MockSuiteRunnerAgent()
         registry = AgentRegistry()
         registry.register("test", agent)
 

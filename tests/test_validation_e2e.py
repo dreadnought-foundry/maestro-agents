@@ -12,7 +12,7 @@ from src.adapters.memory import InMemoryAdapter
 from src.agents.execution.mocks import (
     MockProductEngineerAgent,
     MockQualityEngineerAgent,
-    MockTestRunnerAgent,
+    MockSuiteRunnerAgent,
 )
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
@@ -55,7 +55,7 @@ async def test_multi_type_sprint_with_hooks_all_succeed():
     backend, sprint_id = await _create_sprint(tasks)
 
     impl_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent()
+    test_agent = MockSuiteRunnerAgent()
     review_agent = MockQualityEngineerAgent()
 
     registry = _registry_for_types({
@@ -101,7 +101,7 @@ async def test_coverage_gate_blocks_low_coverage():
         coverage=50.0,
     )
     impl_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent(result=low_coverage_result)
+    test_agent = MockSuiteRunnerAgent(result=low_coverage_result)
 
     registry = _registry_for_types({
         "implement": impl_agent,
@@ -137,7 +137,7 @@ async def test_quality_review_gate_blocks_unapproved():
     backend, sprint_id = await _create_sprint(tasks)
 
     impl_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent()
+    test_agent = MockSuiteRunnerAgent()
 
     registry = _registry_for_types({
         "implement": impl_agent,
@@ -223,7 +223,7 @@ async def test_deferred_items_collected_across_mixed_agents():
             deferred_items=["TODO: add error handling"],
         )
     )
-    test_agent = MockTestRunnerAgent(
+    test_agent = MockSuiteRunnerAgent(
         result=AgentResult(
             success=True,
             output="tests pass",
@@ -300,7 +300,7 @@ async def test_previous_outputs_accumulate_across_steps():
     result_3 = AgentResult(success=True, output="step-3-output", review_verdict="approve")
 
     agent_1 = MockProductEngineerAgent(result=result_1)
-    agent_2 = MockTestRunnerAgent(result=result_2)
+    agent_2 = MockSuiteRunnerAgent(result=result_2)
     agent_3 = MockQualityEngineerAgent(result=result_3)
 
     registry = _registry_for_types({
@@ -359,7 +359,7 @@ async def test_full_lifecycle_epic_to_done():
     # Set up agents and run
     registry = _registry_for_types({
         "implement": MockProductEngineerAgent(),
-        "test": MockTestRunnerAgent(),
+        "test": MockSuiteRunnerAgent(),
         "review": MockQualityEngineerAgent(),
     })
 
@@ -400,7 +400,7 @@ async def test_runner_with_all_default_hooks_happy_path():
     backend, sprint_id = await _create_sprint(tasks, goal="Happy path with all hooks")
 
     impl_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent(
+    test_agent = MockSuiteRunnerAgent(
         result=AgentResult(
             success=True,
             output="All tests passed",

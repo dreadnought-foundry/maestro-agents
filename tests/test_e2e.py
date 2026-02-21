@@ -12,7 +12,7 @@ from src.adapters.memory import InMemoryAdapter
 from src.agents.execution.mocks import (
     MockPlanningAgent,
     MockProductEngineerAgent,
-    MockTestRunnerAgent,
+    MockSuiteRunnerAgent,
     MockValidationAgent,
 )
 from src.agents.execution.registry import AgentRegistry
@@ -51,7 +51,7 @@ def _create_full_registry() -> AgentRegistry:
     registry = AgentRegistry()
     registry.register("planning", MockPlanningAgent())
     registry.register("implement", MockProductEngineerAgent())
-    registry.register("test", MockTestRunnerAgent())
+    registry.register("test", MockSuiteRunnerAgent())
     registry.register("validate", MockValidationAgent())
     registry.register("review", MockProductEngineerAgent())
     return registry
@@ -110,7 +110,7 @@ class TestFullLifecycle:
         backend, sprint_id = await _create_backend_with_sprint()
 
         planning = MockPlanningAgent()
-        tdd = MockTestRunnerAgent()
+        tdd = MockSuiteRunnerAgent()
         build = MockProductEngineerAgent()
         validate = MockValidationAgent()
 
@@ -149,7 +149,7 @@ class TestFullLifecycle:
 
         registry = AgentRegistry()
         registry.register("planning", planning)
-        registry.register("test", MockTestRunnerAgent())
+        registry.register("test", MockSuiteRunnerAgent())
         registry.register("implement", build)
         registry.register("validate", MockValidationAgent())
 
@@ -185,7 +185,7 @@ class TestPhaseFailure:
 
         registry = AgentRegistry()
         registry.register("planning", MockPlanningAgent())
-        registry.register("test", MockTestRunnerAgent())
+        registry.register("test", MockSuiteRunnerAgent())
         registry.register("implement", failing_build)
         registry.register("validate", MockValidationAgent())
 
@@ -210,7 +210,7 @@ class TestPhaseFailure:
 
         registry = AgentRegistry()
         registry.register("planning", MockPlanningAgent())
-        registry.register("test", MockTestRunnerAgent())
+        registry.register("test", MockSuiteRunnerAgent())
         registry.register("implement", MockProductEngineerAgent())
         registry.register("validate", failing_validator)
 
@@ -341,7 +341,7 @@ class TestStatusTransitions:
         registry = AgentRegistry()
         registry.register("planning", MockPlanningAgent())
         # Deliberately fail at TDD
-        registry.register("test", MockTestRunnerAgent(
+        registry.register("test", MockSuiteRunnerAgent(
             result=AgentResult(success=False, output="Could not write tests")
         ))
         registry.register("implement", MockProductEngineerAgent())

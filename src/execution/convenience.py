@@ -18,7 +18,7 @@ def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry
     from src.agents.execution.planning_agent import PlanningAgent
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
-    from src.agents.execution.test_runner import TestRunnerAgent
+    from src.agents.execution.suite_runner import SuiteRunnerAgent
     from src.agents.execution.validation_agent import ValidationAgent
 
     executor = ClaudeCodeExecutor(model=model, max_turns=max_turns)
@@ -26,8 +26,8 @@ def create_registry(model: str = "sonnet", max_turns: int = 25) -> AgentRegistry
     registry.register("planning", PlanningAgent(executor=executor))
     registry.register("implement", ProductEngineerAgent(executor=executor))
     registry.register("write_code", ProductEngineerAgent(executor=executor))
-    registry.register("test", TestRunnerAgent(executor=executor))
-    registry.register("run_tests", TestRunnerAgent(executor=executor))
+    registry.register("test", SuiteRunnerAgent(executor=executor))
+    registry.register("run_tests", SuiteRunnerAgent(executor=executor))
     registry.register("validate", ValidationAgent(executor=executor))
     registry.register("validation", ValidationAgent(executor=executor))
     registry.register("review", QualityEngineerAgent(executor=executor))
@@ -41,7 +41,7 @@ def create_test_registry() -> AgentRegistry:
         MockPlanningAgent,
         MockProductEngineerAgent,
         MockQualityEngineerAgent,
-        MockTestRunnerAgent,
+        MockSuiteRunnerAgent,
         MockValidationAgent,
     )
 
@@ -49,8 +49,8 @@ def create_test_registry() -> AgentRegistry:
     registry.register("planning", MockPlanningAgent())
     registry.register("implement", MockProductEngineerAgent())
     registry.register("write_code", MockProductEngineerAgent())
-    registry.register("test", MockTestRunnerAgent())
-    registry.register("run_tests", MockTestRunnerAgent())
+    registry.register("test", MockSuiteRunnerAgent())
+    registry.register("run_tests", MockSuiteRunnerAgent())
     registry.register("validate", MockValidationAgent())
     registry.register("validation", MockValidationAgent())
     registry.register("review", MockQualityEngineerAgent())

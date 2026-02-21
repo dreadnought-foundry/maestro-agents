@@ -68,11 +68,11 @@ class TestCLIModuleImports:
             "ExecutionAgent",
             "MockProductEngineerAgent",
             "MockQualityEngineerAgent",
-            "MockTestRunnerAgent",
+            "MockSuiteRunnerAgent",
             "ProductEngineerAgent",
             "QualityEngineerAgent",
             "StepContext",
-            "TestRunnerAgent",
+            "SuiteRunnerAgent",
         ]
         for name in expected:
             assert hasattr(src.agents.execution, name), (

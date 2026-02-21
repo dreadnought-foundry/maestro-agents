@@ -1,4 +1,4 @@
-"""Tests for TestRunnerAgent and MockTestRunnerAgent."""
+"""Tests for SuiteRunnerAgent and MockSuiteRunnerAgent."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.execution.mocks import MockTestRunnerAgent
+from src.agents.execution.mocks import MockSuiteRunnerAgent
 from src.agents.execution.protocol import ExecutionAgent
-from src.agents.execution.test_runner import TestRunnerAgent
+from src.agents.execution.suite_runner import SuiteRunnerAgent
 from src.agents.execution.types import AgentResult, StepContext
 from src.workflow.models import Epic, EpicStatus, Sprint, SprintStatus, Step
 
@@ -48,19 +48,19 @@ def _make_context(
 
 
 # ===========================================================================
-# MockTestRunnerAgent tests
+# MockSuiteRunnerAgent tests
 # ===========================================================================
 
 
-class TestMockTestRunnerAgent:
+class TestMockSuiteRunnerAgent:
     """Tests for the mock test runner used in sprint runner testing."""
 
     def test_satisfies_execution_agent_protocol(self) -> None:
-        agent = MockTestRunnerAgent()
+        agent = MockSuiteRunnerAgent()
         assert isinstance(agent, ExecutionAgent)
 
     async def test_returns_default_result_with_test_results_and_coverage(self) -> None:
-        agent = MockTestRunnerAgent()
+        agent = MockSuiteRunnerAgent()
         ctx = _make_context()
         result = await agent.execute(ctx)
         assert result.success is True
@@ -74,7 +74,7 @@ class TestMockTestRunnerAgent:
         assert result.coverage == 95.0
 
     async def test_tracks_call_count_and_last_context(self) -> None:
-        agent = MockTestRunnerAgent()
+        agent = MockSuiteRunnerAgent()
         ctx = _make_context(step_name="special test step")
         assert agent.call_count == 0
         assert agent.last_context is None
@@ -87,30 +87,30 @@ class TestMockTestRunnerAgent:
 
 
 # ===========================================================================
-# TestRunnerAgent tests
+# SuiteRunnerAgent tests
 # ===========================================================================
 
 
-class TestTestRunnerAgent:
+class TestSuiteRunnerAgent:
     """Tests for the real test runner agent (structural / unit tests)."""
 
     def test_satisfies_execution_agent_protocol(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         assert isinstance(agent, ExecutionAgent)
 
     def test_has_correct_name_and_description(self) -> None:
-        agent = TestRunnerAgent()
-        assert agent.name == "test_runner"
+        agent = SuiteRunnerAgent()
+        assert agent.name == "suite_runner"
         assert "pytest" in agent.description.lower() or "test" in agent.description.lower()
 
     def test_build_command_includes_project_root(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         cmd = agent._build_command(Path("/my/project"))
         assert "/my/project" in cmd
         assert "pytest" in cmd
 
     def test_parse_results_all_passing(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         stdout = (
             "tests/test_foo.py::test_one PASSED\n"
             "tests/test_foo.py::test_two PASSED\n"
@@ -125,7 +125,7 @@ class TestTestRunnerAgent:
         assert result.test_results["failed_tests"] == []
 
     def test_parse_results_with_failures(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         stdout = (
             "tests/test_foo.py::test_one PASSED\n"
             "tests/test_foo.py::test_two FAILED\n"
@@ -141,7 +141,7 @@ class TestTestRunnerAgent:
         assert "tests/test_foo.py::test_two" in result.test_results["failed_tests"]
 
     def test_parse_results_with_coverage(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         stdout = (
             "tests/test_foo.py::test_one PASSED\n"
             "========================= 4 passed in 0.30s =========================\n"
@@ -155,7 +155,7 @@ class TestTestRunnerAgent:
         assert result.coverage == 90.0
 
     async def test_execute_returns_failure_when_subprocess_unavailable(self) -> None:
-        agent = TestRunnerAgent()
+        agent = SuiteRunnerAgent()
         ctx = _make_context()
         result = await agent.execute(ctx)
         assert result.success is False

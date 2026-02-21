@@ -4,7 +4,7 @@ from src.agents.execution.mocks import (
     MockPlanningAgent,
     MockProductEngineerAgent,
     MockQualityEngineerAgent,
-    MockTestRunnerAgent,
+    MockSuiteRunnerAgent,
     MockValidationAgent,
 )
 from src.agents.execution.protocol import ExecutionAgent
@@ -16,7 +16,7 @@ try:
     from src.agents.execution.planning_agent import PlanningAgent
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
-    from src.agents.execution.test_runner import TestRunnerAgent
+    from src.agents.execution.suite_runner import SuiteRunnerAgent
     from src.agents.execution.validation_agent import ValidationAgent
 
     _HAS_SDK = True
@@ -25,7 +25,7 @@ except ImportError:
     PlanningAgent = None  # type: ignore[assignment,misc]
     ProductEngineerAgent = None  # type: ignore[assignment,misc]
     QualityEngineerAgent = None  # type: ignore[assignment,misc]
-    TestRunnerAgent = None  # type: ignore[assignment,misc]
+    SuiteRunnerAgent = None  # type: ignore[assignment,misc]
     ValidationAgent = None  # type: ignore[assignment,misc]
     _HAS_SDK = False
 
@@ -37,12 +37,12 @@ __all__ = [
     "MockPlanningAgent",
     "MockProductEngineerAgent",
     "MockQualityEngineerAgent",
-    "MockTestRunnerAgent",
+    "MockSuiteRunnerAgent",
     "MockValidationAgent",
     "PlanningAgent",
     "ProductEngineerAgent",
     "QualityEngineerAgent",
     "StepContext",
-    "TestRunnerAgent",
+    "SuiteRunnerAgent",
     "ValidationAgent",
 ]

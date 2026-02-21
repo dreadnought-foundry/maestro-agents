@@ -6,7 +6,7 @@ from src.adapters.memory import InMemoryAdapter
 from src.agents.execution.mocks import (
     MockProductEngineerAgent,
     MockQualityEngineerAgent,
-    MockTestRunnerAgent,
+    MockSuiteRunnerAgent,
 )
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
@@ -88,7 +88,7 @@ async def test_full_lifecycle_with_multiple_step_types():
     )
 
     impl_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent()
+    test_agent = MockSuiteRunnerAgent()
     review_agent = MockQualityEngineerAgent()
 
     registry = AgentRegistry()
@@ -165,7 +165,7 @@ async def test_resume_after_failure():
     )
 
     # First run: test agent fails
-    fail_test_agent = MockTestRunnerAgent(
+    fail_test_agent = MockSuiteRunnerAgent(
         result=AgentResult(success=False, output="Tests failed")
     )
 
@@ -182,7 +182,7 @@ async def test_resume_after_failure():
     assert updated.status is SprintStatus.BLOCKED
 
     # Now fix the test agent and resume
-    passing_test_agent = MockTestRunnerAgent()  # default passes
+    passing_test_agent = MockSuiteRunnerAgent()  # default passes
     registry2 = AgentRegistry()
     registry2.register("implement", MockProductEngineerAgent())
     registry2.register("test", passing_test_agent)
@@ -271,7 +271,7 @@ async def test_create_registry_returns_real_agents():
     """create_registry() wires real agents with ClaudeCodeExecutor."""
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
-    from src.agents.execution.test_runner import TestRunnerAgent
+    from src.agents.execution.suite_runner import SuiteRunnerAgent
 
     registry = create_registry()
     agents = registry.list_agents()
@@ -286,7 +286,7 @@ async def test_create_registry_returns_real_agents():
 
     # But real agent classes, not mocks
     assert isinstance(agents["implement"], ProductEngineerAgent)
-    assert isinstance(agents["test"], TestRunnerAgent)
+    assert isinstance(agents["test"], SuiteRunnerAgent)
     assert isinstance(agents["review"], QualityEngineerAgent)
 
     # Each agent has an executor injected
@@ -301,7 +301,7 @@ async def test_create_test_registry_returns_mock_agents():
     agents = registry.list_agents()
 
     assert isinstance(agents["implement"], MockProductEngineerAgent)
-    assert isinstance(agents["test"], MockTestRunnerAgent)
+    assert isinstance(agents["test"], MockSuiteRunnerAgent)
     assert isinstance(agents["review"], MockQualityEngineerAgent)
 
 

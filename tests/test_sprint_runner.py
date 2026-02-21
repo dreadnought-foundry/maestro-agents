@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.adapters.memory import InMemoryAdapter
-from src.agents.execution.mocks import MockProductEngineerAgent, MockTestRunnerAgent
+from src.agents.execution.mocks import MockProductEngineerAgent, MockSuiteRunnerAgent
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
 from src.execution.config import RunConfig
@@ -107,7 +107,7 @@ async def test_correct_agent_called():
     backend, sprint_id = await _setup_single_step(tasks=tasks)
 
     code_agent = MockProductEngineerAgent()
-    test_agent = MockTestRunnerAgent()
+    test_agent = MockSuiteRunnerAgent()
 
     registry = AgentRegistry()
     registry.register("write_code", code_agent)

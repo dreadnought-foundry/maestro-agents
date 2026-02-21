@@ -90,11 +90,11 @@ class MockQualityEngineerAgent:
         return self._result
 
 
-class MockTestRunnerAgent:
-    """Mock test runner for testing. Returns configurable test results."""
+class MockSuiteRunnerAgent:
+    """Mock suite runner for testing. Returns configurable test results."""
 
-    name: str = "mock_test_runner"
-    description: str = "Mock test runner agent for testing"
+    name: str = "mock_suite_runner"
+    description: str = "Mock suite runner agent for testing"
 
     def __init__(self, result: AgentResult | None = None) -> None:
         self._result = result or AgentResult(

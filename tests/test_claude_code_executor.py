@@ -15,7 +15,7 @@ import pytest
 from src.agents.execution.claude_code import ClaudeCodeExecutor
 from src.agents.execution.product_engineer import ProductEngineerAgent
 from src.agents.execution.quality_engineer import QualityEngineerAgent
-from src.agents.execution.test_runner import TestRunnerAgent
+from src.agents.execution.suite_runner import SuiteRunnerAgent
 from src.agents.execution.types import AgentResult, StepContext
 from src.workflow.models import Epic, EpicStatus, Sprint, SprintStatus, Step, StepStatus
 
@@ -97,7 +97,7 @@ class TestAgentWiring:
         assert "No ClaudeCodeExecutor" in result.output
 
     async def test_no_executor_fails_gracefully_test_runner(self, sample_context):
-        result = await TestRunnerAgent().execute(sample_context)
+        result = await SuiteRunnerAgent().execute(sample_context)
         assert result.success is False
         assert "No ClaudeCodeExecutor" in result.output
 
@@ -110,7 +110,7 @@ class TestAgentWiring:
     @pytest.mark.timeout(60)
     async def test_all_agents_real_sdk(self, sample_context):
         """One test, three agents — minimizes SDK calls (~5s each)."""
-        for AgentClass in (ProductEngineerAgent, TestRunnerAgent, QualityEngineerAgent):
+        for AgentClass in (ProductEngineerAgent, SuiteRunnerAgent, QualityEngineerAgent):
             agent = AgentClass(executor=_FAST_EXECUTOR)
             result = await agent.execute(sample_context)
             assert isinstance(result, AgentResult), f"{AgentClass.__name__} failed"
@@ -130,9 +130,9 @@ class TestMockAgentsUnchanged:
         assert agent.call_count == 1
 
     async def test_mock_test_runner(self, sample_context):
-        from src.agents.execution.mocks import MockTestRunnerAgent
+        from src.agents.execution.mocks import MockSuiteRunnerAgent
 
-        agent = MockTestRunnerAgent()
+        agent = MockSuiteRunnerAgent()
         result = await agent.execute(sample_context)
         assert result.success is True
         assert result.test_results["total"] == 10

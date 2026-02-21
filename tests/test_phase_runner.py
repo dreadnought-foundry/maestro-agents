@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.adapters.memory import InMemoryAdapter
-from src.agents.execution.mocks import MockProductEngineerAgent, MockTestRunnerAgent
+from src.agents.execution.mocks import MockProductEngineerAgent, MockSuiteRunnerAgent
 from src.agents.execution.registry import AgentRegistry
 from src.agents.execution.types import AgentResult
 from src.execution.config import RunConfig
@@ -74,9 +74,9 @@ async def test_phase_progression_plan_tdd_build_validate_stops_at_review():
     backend, sprint_id = await _setup()
 
     plan_agent = MockProductEngineerAgent()
-    tdd_agent = MockTestRunnerAgent()
+    tdd_agent = MockSuiteRunnerAgent()
     build_agent = MockProductEngineerAgent()
-    validate_agent = MockTestRunnerAgent()
+    validate_agent = MockSuiteRunnerAgent()
 
     registry = AgentRegistry()
     registry.register("plan", plan_agent)
@@ -142,7 +142,7 @@ async def test_gate_failure_blocks_sprint():
 
     registry = AgentRegistry()
     registry.register("plan", MockProductEngineerAgent())
-    registry.register("tdd", MockTestRunnerAgent())
+    registry.register("tdd", MockSuiteRunnerAgent())
 
     async def failing_gate(phase_result: PhaseResult) -> tuple[bool, str]:
         return False, "Tests must all fail initially"
@@ -165,14 +165,14 @@ async def test_gate_failure_stops_subsequent_phases():
     backend, sprint_id = await _setup()
 
     plan_agent = MockProductEngineerAgent()
-    tdd_agent = MockTestRunnerAgent()
+    tdd_agent = MockSuiteRunnerAgent()
     build_agent = MockProductEngineerAgent()
 
     registry = AgentRegistry()
     registry.register("plan", plan_agent)
     registry.register("tdd", tdd_agent)
     registry.register("build", build_agent)
-    registry.register("validate", MockTestRunnerAgent())
+    registry.register("validate", MockSuiteRunnerAgent())
 
     async def failing_gate(phase_result: PhaseResult) -> tuple[bool, str]:
         return False, "Gate check failed"
@@ -309,7 +309,7 @@ async def test_agent_failure_in_phase_blocks_sprint():
     registry.register("plan", plan_agent)
     registry.register("tdd", failing_tdd)
     registry.register("build", MockProductEngineerAgent())
-    registry.register("validate", MockTestRunnerAgent())
+    registry.register("validate", MockSuiteRunnerAgent())
 
     phase_configs = [
         PhaseConfig(phase=Phase.PLAN, agent_type="plan", max_retries=0),
@@ -343,7 +343,7 @@ async def test_deferred_items_collected_across_phases():
     registry.register("plan", plan_agent)
     registry.register("tdd", MockProductEngineerAgent())
     registry.register("build", build_agent)
-    registry.register("validate", MockTestRunnerAgent())
+    registry.register("validate", MockSuiteRunnerAgent())
 
     phase_configs = _make_phase_configs()
     runner = _make_phased_runner(backend, registry, phase_configs)
@@ -404,7 +404,7 @@ async def test_phase_retries_on_failure():
     registry.register("plan", RetryAgent())
     registry.register("tdd", MockProductEngineerAgent())
     registry.register("build", MockProductEngineerAgent())
-    registry.register("validate", MockTestRunnerAgent())
+    registry.register("validate", MockSuiteRunnerAgent())
 
     phase_configs = [
         PhaseConfig(phase=Phase.PLAN, agent_type="plan", max_retries=2),

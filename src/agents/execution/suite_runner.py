@@ -1,4 +1,4 @@
-"""Test runner execution agent that runs pytest and reports results."""
+"""Suite runner execution agent that runs pytest and reports results."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ if TYPE_CHECKING:
     from src.agents.execution.claude_code import ClaudeCodeExecutor
 
 
-class TestRunnerAgent:
+class SuiteRunnerAgent:
     """Execution agent that runs pytest and reports results."""
 
-    name: str = "test_runner"
+    name: str = "suite_runner"
     description: str = "Runs pytest and reports test results with coverage"
 
     ALLOWED_TOOLS = [
