@@ -680,31 +680,13 @@ class KanbanApp(App):
             # Fallback to filesystem operations if adapter fails
             write_history_entry(sprint.path, "4-done")
             src = sprint.movable_path
-            parent = src.parent
-            if parent.name.startswith("epic-"):
-                self._add_done_suffix(src)
-            else:
-                self._add_done_suffix(src)
-                target = self.kanban_dir / "4-done"
-                target.mkdir(parents=True, exist_ok=True)
-                done_name = src.name + "--done" if src.is_dir() else src.name
-                done_path = src.parent / done_name if src.is_dir() else src
-                if done_path.exists():
-                    shutil.move(str(done_path), str(target / done_path.name))
+            target = self.kanban_dir / "4-done"
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(target / src.name))
             self.notify(f"S-{sprint.number:02d} completed!", severity="information")
 
         await self.action_refresh()
 
-    def _add_done_suffix(self, path: Path) -> None:
-        """Add --done suffix to a sprint dir/file."""
-        if path.is_dir() and "--done" not in path.name:
-            new_name = path.name + "--done"
-            path.rename(path.parent / new_name)
-            # Also rename the main .md inside
-            for md in (path.parent / new_name).glob("*.md"):
-                if "--done" not in md.name and not md.name.startswith("_"):
-                    md.rename(md.parent / (md.stem + "--done" + md.suffix))
-                    break
 
     def action_reject_review(self) -> None:
         if not self._is_in_review_column():
