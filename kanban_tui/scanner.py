@@ -207,6 +207,7 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
 
     # Second pass: distribute each epic's sprints into their target display columns.
     # The same epic may appear in multiple columns with different sprint subsets.
+    # If an epic has no sprints in a column, it won't appear there (no empty epics).
     for epic_number in sorted(all_epics):
         epic, physical_col = all_epics[epic_number]
 
@@ -217,17 +218,30 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
                 target_col = physical_col  # fallback if column doesn't exist on disk
             sprints_by_col.setdefault(target_col, []).append(sprint)
 
-        for target_col, sprints in sprints_by_col.items():
-            if target_col in columns:
+        # If the epic has no sprints at all, place it in its physical column
+        if not sprints_by_col:
+            if physical_col in columns:
                 col_epic = EpicInfo(
                     number=epic.number,
                     title=epic.title,
                     status=epic.status,
                     path=epic.path,
-                    sprints=sorted(sprints, key=lambda s: s.number),
+                    sprints=[],
                     raw_frontmatter=epic.raw_frontmatter,
                 )
-                columns[target_col].epics.append(col_epic)
+                columns[physical_col].epics.append(col_epic)
+        else:
+            for target_col, sprints in sprints_by_col.items():
+                if target_col in columns:
+                    col_epic = EpicInfo(
+                        number=epic.number,
+                        title=epic.title,
+                        status=epic.status,
+                        path=epic.path,
+                        sprints=sorted(sprints, key=lambda s: s.number),
+                        raw_frontmatter=epic.raw_frontmatter,
+                    )
+                    columns[target_col].epics.append(col_epic)
 
     # Distribute standalone sprints into their target display columns.
     for sprint, physical_col in all_standalone:
