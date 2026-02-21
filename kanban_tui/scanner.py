@@ -63,19 +63,18 @@ def parse_frontmatter(filepath: Path) -> dict:
 def _find_sprint_md(sprint_dir: Path) -> Path | None:
     """Find the primary sprint .md file in a sprint folder.
 
-    Prefers the file whose name matches the folder name (ignoring --done/--blocked
-    suffixes). Falls back to a file starting with the sprint prefix (e.g. sprint-29_).
-    Skips artifact files like _contracts.md, _quality.md, _postmortem.md, _deferred.md.
+    Prefers the file whose name matches the folder name. Falls back to a file
+    starting with the sprint prefix (e.g. sprint-29_). Skips artifact files like
+    _contracts.md, _quality.md, _postmortem.md, _deferred.md.
     """
-    folder_stem = re.sub(r"--(done|blocked)$", "", sprint_dir.name)
+    folder_stem = sprint_dir.name
     md_files = list(sprint_dir.glob("*.md"))
     if not md_files:
         return None
 
-    # Best match: filename stem matches folder name (with or without suffix)
+    # Best match: filename stem matches folder name
     for md in md_files:
-        md_stem = re.sub(r"--(done|blocked)$", "", md.stem)
-        if md_stem == folder_stem:
+        if md.stem == folder_stem:
             return md
 
     # Fallback: file starting with the sprint prefix (sprint-NN_)
@@ -118,11 +117,11 @@ def _parse_sprint_md(
     if number is None:
         return None
 
-    # Derive status: path suffix > YAML > column directory > unknown
+    # Derive status: column directory > YAML > unknown
     status = (
-        _status_from_name(movable_path.name)
+        COLUMN_TO_STATUS.get(column or "")
         or fm.get("status")
-        or COLUMN_TO_STATUS.get(column or "", "unknown")
+        or "unknown"
     )
 
     return SprintInfo(
@@ -187,13 +186,6 @@ COLUMN_TO_STATUS: dict[str, str] = {
 }
 
 
-def _status_from_name(name: str) -> str | None:
-    """Detect explicit status from --done or --blocked suffix in a path name."""
-    if "--done" in name:
-        return "done"
-    if "--blocked" in name:
-        return "blocked"
-    return None
 
 
 def write_history_entry(md_path: Path, column: str) -> None:
@@ -222,15 +214,9 @@ def write_history_entry(md_path: Path, column: str) -> None:
 def _sprint_display_column(sprint: SprintInfo, physical_col: str) -> str:
     """Determine which display column a sprint should appear in.
 
-    The filesystem is the source of truth:
-    1. --done / --blocked suffix on the movable path overrides the column
-    2. Physical column directory (where the file lives)
-
-    YAML status is informational only — it does not affect column placement.
+    The filesystem directory is the sole source of truth — sprints appear
+    in whatever column directory they physically reside in.
     """
-    suffix_status = _status_from_name(sprint.movable_path.name)
-    if suffix_status:
-        return STATUS_TO_COLUMN.get(suffix_status, physical_col)
     return physical_col
 
 
