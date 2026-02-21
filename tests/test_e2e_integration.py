@@ -70,9 +70,9 @@ async def test_full_lifecycle_create_to_completion():
     assert result.steps_total == 3
     assert result.duration_seconds >= 0
 
-    # Verify backend state
+    # Verify backend state — runner stops at REVIEW
     updated_sprint = await backend.get_sprint(sprint.id)
-    assert updated_sprint.status is SprintStatus.DONE
+    assert updated_sprint.status is SprintStatus.REVIEW
 
 
 async def test_full_lifecycle_with_multiple_step_types():
@@ -120,11 +120,12 @@ async def test_dependency_enforcement():
         await validate_sprint_dependencies(sprint_b.id, backend)
     assert sprint_a.id in exc_info.value.unmet_dependencies
 
-    # Complete sprint A
+    # Run sprint A (stops at REVIEW), then manually complete it
     registry = create_test_registry()
     runner = SprintRunner(backend=backend, agent_registry=registry, config=_TEST_CONFIG)
     result_a = await runner.run(sprint_a.id)
     assert result_a.success is True
+    await backend.complete_sprint(sprint_a.id)
 
     # Now B's deps should be met
     await validate_sprint_dependencies(sprint_b.id, backend)  # no exception
@@ -258,7 +259,7 @@ async def test_run_sprint_convenience_function():
     assert result.steps_total == 3
 
     updated = await backend.get_sprint(sprint.id)
-    assert updated.status is SprintStatus.DONE
+    assert updated.status is SprintStatus.REVIEW
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +269,7 @@ async def test_run_sprint_convenience_function():
 
 async def test_create_registry_returns_real_agents():
     """create_registry() wires real agents with ClaudeCodeExecutor."""
+    pytest.importorskip("claude_agent_sdk")
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
     from src.agents.execution.test_runner import TestRunnerAgent

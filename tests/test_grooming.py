@@ -39,7 +39,7 @@ def _make_epic_dir(tmp_path: Path, epic_num: int, sprints: list[tuple[int, str]]
     """Create a minimal epic directory with sprints in status folders.
 
     sprints: list of (sprint_num, status) where status is a kanban folder name
-    like "3-done" or "2-in-progress".
+    like "4-done" or "2-in-progress".
     """
     for sprint_num, status_folder in sprints:
         sprint_dir = tmp_path / status_folder / f"epic-{epic_num:02d}_test" / f"sprint-{sprint_num:02d}_s"
@@ -151,7 +151,7 @@ class TestGroomingAgentPromptBuilding:
     def test_selects_mid_epic_prompt_when_epic_incomplete(self, tmp_path):
         """Mid-epic mode when epic has incomplete sprints."""
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
-            (20, "3-done"),
+            (20, "4-done"),
             (21, "2-in-progress"),
         ])
         agent = GroomingAgent()
@@ -161,8 +161,8 @@ class TestGroomingAgentPromptBuilding:
     def test_selects_full_prompt_when_epic_complete(self, tmp_path):
         """Full grooming mode when epic is fully done."""
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
-            (20, "3-done"),
-            (21, "3-done"),
+            (20, "4-done"),
+            (21, "4-done"),
         ])
         agent = GroomingAgent()
         prompt = agent._select_prompt(epic_num=5, kanban_dir=tmp_path)
@@ -177,15 +177,15 @@ class TestGroomingAgentPromptBuilding:
 class TestIsEpicComplete:
     def test_true_when_all_sprints_done(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=3, sprints=[
-            (10, "3-done"),
-            (11, "3-done"),
-            (12, "3-done"),
+            (10, "4-done"),
+            (11, "4-done"),
+            (12, "4-done"),
         ])
         assert is_epic_complete(3, tmp_path) is True
 
     def test_false_when_some_pending(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=3, sprints=[
-            (10, "3-done"),
+            (10, "4-done"),
             (11, "2-in-progress"),
         ])
         assert is_epic_complete(3, tmp_path) is False
@@ -202,8 +202,8 @@ class TestIsEpicComplete:
 class TestGroomingHook:
     async def test_triggers_full_grooming_when_epic_complete(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
-            (20, "3-done"),
-            (21, "3-done"),
+            (20, "4-done"),
+            (21, "4-done"),
         ])
         mock_agent = MockGroomingAgent()
         hook = GroomingHook(kanban_dir=tmp_path, grooming_agent=mock_agent)
@@ -223,7 +223,7 @@ class TestGroomingHook:
 
     async def test_triggers_mid_epic_grooming_when_not_complete(self, tmp_path):
         _make_epic_dir(tmp_path, epic_num=5, sprints=[
-            (20, "3-done"),
+            (20, "4-done"),
             (21, "2-in-progress"),
         ])
         mock_agent = MockGroomingAgent()
@@ -286,7 +286,8 @@ class TestParseEpicNumber:
 
 
 class TestPostCompletionHookFires:
-    async def test_post_completion_hook_fires_after_success(self):
+    async def test_post_completion_hook_does_not_fire_at_review(self):
+        """Flat-mode runner stops at REVIEW, so POST_COMPLETION hooks don't fire."""
         backend = InMemoryAdapter(project_name="test")
         epic = await backend.create_epic("Test Epic", "desc")
         sprint = await backend.create_sprint(
@@ -319,4 +320,6 @@ class TestPostCompletionHookFires:
         result = await runner.run("s-1")
 
         assert result.success is True
-        assert tracker.call_count == 1
+        assert result.stopped_at_review is True
+        # POST_COMPLETION hooks don't fire when runner stops at REVIEW
+        assert tracker.call_count == 0

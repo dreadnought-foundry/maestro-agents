@@ -723,8 +723,9 @@ class SprintRunner:
             stopped_at_review=True,
         )
 
-        # Generate draft quality report for reviewer
+        # Generate artifacts and draft quality report for reviewer
         sprint = await self._backend.get_sprint(sprint_id)
+        await self._generate_artifacts(sprint, run_result)
         await self._generate_draft_quality_report(sprint, run_result)
 
         return run_result

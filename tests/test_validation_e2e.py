@@ -82,7 +82,7 @@ async def test_multi_type_sprint_with_hooks_all_succeed():
     assert review_agent.call_count == 1
 
     sprint = await backend.get_sprint(sprint_id)
-    assert sprint.status is SprintStatus.DONE
+    assert sprint.status is SprintStatus.REVIEW
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ async def test_empty_sprint_completes_immediately():
     assert len(result.agent_results) == 0
 
     sprint = await backend.get_sprint(sprint_id)
-    assert sprint.status is SprintStatus.DONE
+    assert sprint.status is SprintStatus.REVIEW
 
 
 # ---------------------------------------------------------------------------
@@ -372,21 +372,16 @@ async def test_full_lifecycle_epic_to_done():
     assert result.steps_total == 3
     assert result.duration_seconds > 0
 
-    # Verify final sprint state
+    # Verify final sprint state — runner stops at REVIEW for human checkpoint
     final_sprint = await backend.get_sprint(sprint.id)
-    assert final_sprint.status is SprintStatus.DONE
+    assert final_sprint.status is SprintStatus.REVIEW
 
-    # Verify transitions: TODO -> IN_PROGRESS -> DONE
+    # Verify transitions: TODO -> IN_PROGRESS -> REVIEW
     assert len(final_sprint.transitions) == 2
     assert final_sprint.transitions[0].from_status is SprintStatus.TODO
     assert final_sprint.transitions[0].to_status is SprintStatus.IN_PROGRESS
     assert final_sprint.transitions[1].from_status is SprintStatus.IN_PROGRESS
-    assert final_sprint.transitions[1].to_status is SprintStatus.DONE
-
-    # Verify all steps are DONE
-    step_status = await backend.get_step_status(sprint.id)
-    for step_info in step_status["steps"]:
-        assert step_info["status"] == "done"
+    assert final_sprint.transitions[1].to_status is SprintStatus.REVIEW
 
     # Verify the epic still references the sprint
     refreshed_epic = await backend.get_epic(epic.id)
@@ -443,5 +438,5 @@ async def test_runner_with_all_default_hooks_happy_path():
     assert review_agent.call_count == 1
 
     sprint = await backend.get_sprint(sprint_id)
-    assert sprint.status is SprintStatus.DONE
+    assert sprint.status is SprintStatus.REVIEW
     assert result.duration_seconds > 0

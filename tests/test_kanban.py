@@ -59,8 +59,8 @@ Test sprint goal.
 @pytest.fixture
 def kanban_dir(tmp_path):
     """Create a kanban directory with status folders."""
-    for folder in ["0-backlog", "1-todo", "2-in-progress", "3-done",
-                    "4-blocked", "5-abandoned", "6-archived"]:
+    for folder in ["0-backlog", "1-todo", "2-in-progress", "3-review",
+                    "4-done", "5-blocked", "6-abandoned", "7-archived"]:
         (tmp_path / folder).mkdir()
     return tmp_path
 
@@ -77,7 +77,7 @@ def populated_board(kanban_dir):
     _create_sprint(epic2, 4, "Test Runner", 2)
 
     # A done epic
-    epic3 = _create_epic(kanban_dir, "3-done", 3, "Done Epic")
+    epic3 = _create_epic(kanban_dir, "4-done", 3, "Done Epic")
     _create_sprint(epic3, 5, "Completed Work", 3)
 
     return kanban_dir

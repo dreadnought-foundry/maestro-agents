@@ -213,9 +213,9 @@ class TestRequiredStepsGate:
 
 
 class TestCreateDefaultHooks:
-    def test_returns_four_hooks(self) -> None:
+    def test_returns_five_hooks(self) -> None:
         hooks = create_default_hooks()
-        assert len(hooks) == 4
+        assert len(hooks) == 5
 
     def test_backend_threshold(self) -> None:
         hooks = create_default_hooks("backend")

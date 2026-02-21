@@ -50,8 +50,8 @@ class TestTransitionDataStructure:
             assert isinstance(to_s, SprintStatus)
 
     def test_expected_count(self):
-        # 8 valid transitions defined in the spec
-        assert len(VALID_TRANSITIONS) == 8
+        # 11 valid transitions: original 8 + 3 REVIEW transitions
+        assert len(VALID_TRANSITIONS) == 11
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +73,9 @@ class TestValidTransitions:
             (SprintStatus.TODO, SprintStatus.BACKLOG),
             (SprintStatus.DONE, SprintStatus.ARCHIVED),
             (SprintStatus.ABANDONED, SprintStatus.ARCHIVED),
+            (SprintStatus.IN_PROGRESS, SprintStatus.REVIEW),
+            (SprintStatus.REVIEW, SprintStatus.DONE),
+            (SprintStatus.REVIEW, SprintStatus.IN_PROGRESS),
         ],
     )
     def test_valid_transition_does_not_raise(self, from_status, to_status):
