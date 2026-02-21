@@ -122,33 +122,34 @@ class TestSprintDisplayColumn:
             is_folder=True,
         )
 
-    def test_yaml_done_maps_to_done_column(self):
+    def test_yaml_status_ignored_uses_physical_column(self):
+        """YAML status alone does not move sprints — directory is source of truth."""
         sprint = self._make_sprint("done", "sprint-01_test")
-        assert _sprint_display_column(sprint, "2-in-progress") == "4-done"
+        assert _sprint_display_column(sprint, "2-in-progress") == "2-in-progress"
 
-    def test_yaml_in_progress_maps_to_in_progress_column(self):
+    def test_yaml_in_progress_stays_in_physical_column(self):
         sprint = self._make_sprint("in-progress", "sprint-01_test")
-        assert _sprint_display_column(sprint, "1-todo") == "2-in-progress"
+        assert _sprint_display_column(sprint, "1-todo") == "1-todo"
 
-    def test_yaml_review_maps_to_review_column(self):
+    def test_yaml_review_stays_in_physical_column(self):
         sprint = self._make_sprint("review", "sprint-01_test")
-        assert _sprint_display_column(sprint, "2-in-progress") == "3-review"
+        assert _sprint_display_column(sprint, "2-in-progress") == "2-in-progress"
 
-    def test_done_suffix_overrides_yaml_status(self):
+    def test_done_suffix_overrides_physical_column(self):
         sprint = self._make_sprint("in-progress", "sprint-01_test--done")
         assert _sprint_display_column(sprint, "2-in-progress") == "4-done"
 
-    def test_blocked_suffix_overrides_yaml_status(self):
+    def test_blocked_suffix_overrides_physical_column(self):
         sprint = self._make_sprint("in-progress", "sprint-01_test--blocked")
         assert _sprint_display_column(sprint, "2-in-progress") == "5-blocked"
 
-    def test_unknown_status_falls_back_to_physical_col(self):
+    def test_unknown_status_stays_in_physical_column(self):
         sprint = self._make_sprint("unknown", "sprint-01_test")
         assert _sprint_display_column(sprint, "2-in-progress") == "2-in-progress"
 
-    def test_planning_maps_to_todo(self):
+    def test_planning_stays_in_physical_column(self):
         sprint = self._make_sprint("planning", "sprint-01_test")
-        assert _sprint_display_column(sprint, "2-in-progress") == "1-todo"
+        assert _sprint_display_column(sprint, "2-in-progress") == "2-in-progress"
 
 
 class TestFindSprintMd:
@@ -234,40 +235,40 @@ class TestParseFrontmatter:
 # ---------------------------------------------------------------------------
 
 class TestScanKanban:
-    def test_epic_with_mixed_statuses_appears_in_multiple_columns(self, tmp_path):
-        """An epic whose sprints have different statuses should appear in each matching column."""
+    def test_epic_with_mixed_suffixes_appears_in_multiple_columns(self, tmp_path):
+        """An epic whose sprints have different path suffixes should appear in each matching column."""
         _make_columns(tmp_path, "2-in-progress", "4-done")
         epic_dir = _write_epic(tmp_path / "2-in-progress", epic_num=7, title="Production")
 
-        _write_sprint(epic_dir, 25, "Executor", status="done", epic_num=7)
+        _write_sprint(epic_dir, 25, "Executor", status="done", epic_num=7, suffix="--done")
         _write_sprint(epic_dir, 26, "E2E", status="in-progress", epic_num=7)
-        _write_sprint(epic_dir, 27, "Lifecycle", status="done", epic_num=7)
+        _write_sprint(epic_dir, 27, "Lifecycle", status="done", epic_num=7, suffix="--done")
 
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
 
-        # E-07 appears in in-progress with S-26 only
+        # E-07 appears in in-progress with S-26 only (no suffix)
         in_prog_epics = {e.number: e for e in col_map["2-in-progress"].epics}
         assert 7 in in_prog_epics
         assert [s.number for s in in_prog_epics[7].sprints] == [26]
 
-        # E-07 appears in done with S-25 and S-27
+        # E-07 appears in done with S-25 and S-27 (--done suffix)
         done_epics = {e.number: e for e in col_map["4-done"].epics}
         assert 7 in done_epics
         assert [s.number for s in done_epics[7].sprints] == [25, 27]
 
-    def test_epic_all_done_appears_only_in_done_column(self, tmp_path):
-        """An epic where all sprints are done should only appear in the done column."""
+    def test_epic_all_done_suffix_appears_only_in_done_column(self, tmp_path):
+        """An epic where all sprints have --done suffix should only appear in the done column."""
         _make_columns(tmp_path, "2-in-progress", "4-done")
 
         epic_dir = _write_epic(tmp_path / "2-in-progress", epic_num=5, title="Completed Epic")
-        _write_sprint(epic_dir, 10, "Alpha", status="done", epic_num=5)
-        _write_sprint(epic_dir, 11, "Beta", status="done", epic_num=5)
+        _write_sprint(epic_dir, 10, "Alpha", status="done", epic_num=5, suffix="--done")
+        _write_sprint(epic_dir, 11, "Beta", status="done", epic_num=5, suffix="--done")
 
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
 
-        # Should NOT appear in in-progress (no sprints left there)
+        # Should NOT appear in in-progress (all sprints have --done suffix)
         in_prog_epic_nums = {e.number for e in col_map["2-in-progress"].epics}
         assert 5 not in in_prog_epic_nums
 
@@ -276,21 +277,38 @@ class TestScanKanban:
         assert 5 in done_epics
         assert len(done_epics[5].sprints) == 2
 
-    def test_standalone_sprint_placed_by_status(self, tmp_path):
-        """A standalone sprint is placed in the column matching its YAML status."""
+    def test_yaml_status_does_not_override_physical_column(self, tmp_path):
+        """YAML status is informational — it does not move a sprint to a different column."""
+        _make_columns(tmp_path, "1-todo", "4-done")
+
+        # Sprint physically in todo, YAML says done, no --done suffix
+        _write_sprint(tmp_path / "1-todo", 1, "Alpha", status="done")
+
+        columns = scan_kanban(tmp_path)
+        col_map = {c.name: c for c in columns}
+
+        # Sprint stays in its physical column (todo), not moved to done
+        todo_sprint_nums = {s.number for s in col_map["1-todo"].standalone_sprints}
+        assert 1 in todo_sprint_nums
+
+        done_sprint_nums = {s.number for s in col_map["4-done"].standalone_sprints}
+        assert 1 not in done_sprint_nums
+
+    def test_standalone_sprint_stays_in_physical_column(self, tmp_path):
+        """A standalone sprint stays in its physical column regardless of YAML status."""
         _make_columns(tmp_path, "1-todo", "2-in-progress", "4-done")
 
-        # Sprint physically in todo but status=done
+        # Sprint physically in todo, YAML says done — should stay in todo
         _write_sprint(tmp_path / "1-todo", 1, "Alpha", status="done")
 
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
 
         todo_sprint_nums = {s.number for s in col_map["1-todo"].standalone_sprints}
-        assert 1 not in todo_sprint_nums
+        assert 1 in todo_sprint_nums
 
         done_sprint_nums = {s.number for s in col_map["4-done"].standalone_sprints}
-        assert 1 in done_sprint_nums
+        assert 1 not in done_sprint_nums
 
     def test_standalone_sprint_with_done_suffix_placed_in_done(self, tmp_path):
         """A standalone sprint folder with --done suffix goes to the done column."""
@@ -312,9 +330,9 @@ class TestScanKanban:
         _make_columns(tmp_path, "2-in-progress", "4-done")
 
         epic_dir = _write_epic(tmp_path / "2-in-progress", epic_num=3, title="Mixed Epic")
-        _write_sprint(epic_dir, 1, "Sprint One", status="done", epic_num=3)
+        _write_sprint(epic_dir, 1, "Sprint One", status="done", epic_num=3, suffix="--done")
         _write_sprint(epic_dir, 2, "Sprint Two", status="in-progress", epic_num=3)
-        _write_sprint(epic_dir, 3, "Sprint Three", status="done", epic_num=3)
+        _write_sprint(epic_dir, 3, "Sprint Three", status="done", epic_num=3, suffix="--done")
 
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
@@ -322,8 +340,8 @@ class TestScanKanban:
         in_prog_epics = {e.number: e for e in col_map["2-in-progress"].epics}
         done_epics = {e.number: e for e in col_map["4-done"].epics}
 
-        assert len(in_prog_epics[3].sprints) == 1  # only S-02
-        assert len(done_epics[3].sprints) == 2      # S-01 and S-03
+        assert len(in_prog_epics[3].sprints) == 1  # only S-02 (no suffix)
+        assert len(done_epics[3].sprints) == 2      # S-01 and S-03 (--done suffix)
 
     def test_epics_sorted_by_number_within_column(self, tmp_path):
         _make_columns(tmp_path, "2-in-progress")
@@ -497,51 +515,47 @@ class TestRealisticDataShape:
             assert s.status == "done"
 
     def test_mixed_epic_with_artifacts_splits_correctly(self, tmp_path):
-        """Epic with some done (with artifacts) and some in-progress sprints."""
-        _make_columns(tmp_path, "2-in-progress", "3-review", "4-done")
+        """Epic with some --done suffix and some without — splits by filesystem only."""
+        _make_columns(tmp_path, "2-in-progress", "4-done")
 
         epic_dir = _write_epic(
             tmp_path / "2-in-progress", epic_num=10, title="Feature Work",
         )
 
-        # 2 done sprints with full artifacts
+        # 2 done sprints with full artifacts and --done suffix
         _write_sprint_with_artifacts(
             epic_dir, 40, "Auth", status="done", epic_num=10, suffix="--done",
         )
         _write_sprint_with_artifacts(
             epic_dir, 41, "Database", status="done", epic_num=10, suffix="--done",
         )
-        # 1 in-progress sprint (no artifacts yet)
+        # 1 in-progress sprint (no artifacts yet, no suffix)
         _write_sprint(epic_dir, 42, "API", status="in-progress", epic_num=10)
-        # 1 in review
+        # 1 in review (no suffix — stays in physical column)
         _write_sprint(epic_dir, 43, "Frontend", status="review", epic_num=10)
 
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
 
-        # in-progress: only S-42
+        # in-progress: S-42 and S-43 (both without suffix, stay in physical column)
         ip_epics = {e.number: e for e in col_map["2-in-progress"].epics}
-        assert [s.number for s in ip_epics[10].sprints] == [42]
+        assert [s.number for s in ip_epics[10].sprints] == [42, 43]
 
-        # review: only S-43
-        review_epics = {e.number: e for e in col_map["3-review"].epics}
-        assert [s.number for s in review_epics[10].sprints] == [43]
-
-        # done: S-40 and S-41 with correct titles (not artifact names)
+        # done: S-40 and S-41 (--done suffix) with correct titles
         done_epics = {e.number: e for e in col_map["4-done"].epics}
         assert [s.number for s in done_epics[10].sprints] == [40, 41]
         assert done_epics[10].sprints[0].title == "Auth"
         assert done_epics[10].sprints[1].title == "Database"
 
     def test_multiple_epics_across_columns(self, tmp_path):
-        """Multiple epics in different physical locations, sprints distributed by status."""
+        """Multiple epics in different physical locations, sprints stay in their columns."""
         _make_columns(tmp_path, "2-in-progress", "4-done", "7-archived")
 
-        # Epic 5 in archived, all sprints done (old data without frontmatter)
+        # Epic 5 in archived — stays in archived (directory is source of truth)
         epic5 = _write_epic(tmp_path / "7-archived", epic_num=5, title="Old Work")
         _write_sprint_with_artifacts(epic5, 20, "Legacy", status="done", epic_num=5)
 
-        # Epic 8 in in-progress, mixed statuses
+        # Epic 8 in in-progress, mixed: one --done suffix, one without
         epic8 = _write_epic(tmp_path / "2-in-progress", epic_num=8, title="Current")
         _write_sprint_with_artifacts(
             epic8, 30, "Done Task", status="done", epic_num=8, suffix="--done",
@@ -551,12 +565,13 @@ class TestRealisticDataShape:
         columns = scan_kanban(tmp_path)
         col_map = {c.name: c for c in columns}
 
-        # Epic 5: sprints go to done (not archived) because status=done
-        done_epics = {e.number: e for e in col_map["4-done"].epics}
-        assert 5 in done_epics
-        assert done_epics[5].sprints[0].title == "Legacy"
+        # Epic 5: stays in archived (its physical column), not moved to done
+        archived_epics = {e.number: e for e in col_map["7-archived"].epics}
+        assert 5 in archived_epics
+        assert archived_epics[5].sprints[0].title == "Legacy"
 
-        # Epic 8: split between in-progress and done
+        # Epic 8: split between in-progress and done (via --done suffix)
+        done_epics = {e.number: e for e in col_map["4-done"].epics}
         assert 8 in done_epics
         assert done_epics[8].sprints[0].title == "Done Task"
 
@@ -631,24 +646,23 @@ class TestRealKanbanSanity:
             for sprint in col.standalone_sprints:
                 assert sprint.number > 0, f"Invalid sprint number in {col.name}"
 
-    def test_no_duplicate_sprint_numbers_in_same_column(self, real_kanban_dir):
-        """No two sprints with the same number should appear in the same column."""
+    def test_no_duplicate_sprint_numbers_within_epic_in_same_column(self, real_kanban_dir):
+        """No two sprints with the same number in the same epic should appear in one column."""
         columns = scan_kanban(real_kanban_dir)
         for col in columns:
-            seen = set()
             for epic in col.epics:
+                seen = set()
                 for sprint in epic.sprints:
-                    key = sprint.number
-                    assert key not in seen, (
-                        f"Duplicate S-{key} in {col.name}"
+                    assert sprint.number not in seen, (
+                        f"Duplicate S-{sprint.number} in E-{epic.number} ({col.name})"
                     )
-                    seen.add(key)
+                    seen.add(sprint.number)
+            standalone_seen = set()
             for sprint in col.standalone_sprints:
-                key = sprint.number
-                assert key not in seen, (
-                    f"Duplicate standalone S-{key} in {col.name}"
+                assert sprint.number not in standalone_seen, (
+                    f"Duplicate standalone S-{sprint.number} in {col.name}"
                 )
-                seen.add(key)
+                standalone_seen.add(sprint.number)
 
     def test_columns_present(self, real_kanban_dir):
         """The real kanban dir should have at least the main columns."""

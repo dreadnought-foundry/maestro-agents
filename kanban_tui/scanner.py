@@ -174,17 +174,15 @@ def _status_from_name(name: str) -> str | None:
 def _sprint_display_column(sprint: SprintInfo, physical_col: str) -> str:
     """Determine which display column a sprint should appear in.
 
-    Priority:
-    1. --done / --blocked suffix on the movable path (explicit filesystem signal)
-    2. YAML status field
-    3. Physical column (fallback)
+    The filesystem is the source of truth:
+    1. --done / --blocked suffix on the movable path overrides the column
+    2. Physical column directory (where the file lives)
+
+    YAML status is informational only — it does not affect column placement.
     """
     suffix_status = _status_from_name(sprint.movable_path.name)
     if suffix_status:
         return STATUS_TO_COLUMN.get(suffix_status, physical_col)
-    col = STATUS_TO_COLUMN.get(sprint.status)
-    if col:
-        return col
     return physical_col
 
 
