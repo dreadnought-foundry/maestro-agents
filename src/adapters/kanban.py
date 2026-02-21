@@ -173,14 +173,7 @@ def _column_of(path: Path) -> str:
 
 
 def _sprint_status_from_path(path: Path) -> SprintStatus:
-    """Infer sprint status from filename suffixes and column."""
-    name = path.name + " " + path.parent.name
-    if "--done" in name:
-        return SprintStatus.DONE
-    if "--aborted" in name:
-        return SprintStatus.ABANDONED
-    if "--blocked" in name:
-        return SprintStatus.BLOCKED
+    """Infer sprint status from column directory (filesystem is source of truth)."""
     col = _column_of(path)
     return COLUMN_TO_STATUS.get(col, SprintStatus.TODO)
 
@@ -194,37 +187,6 @@ def _is_in_epic(path: Path) -> tuple[bool, str | None]:
                 return True, f"e-{int(m.group(1))}"
     return False, None
 
-
-def _add_suffix(path: Path, suffix: str) -> Path:
-    """Add --done or --blocked suffix to sprint file and its parent dir."""
-    new_file_name = path.stem + f"--{suffix}" + path.suffix
-    if path.parent.name.startswith("sprint-") and f"--{suffix}" not in path.parent.name:
-        new_dir = path.parent.with_name(path.parent.name + f"--{suffix}")
-        path.parent.rename(new_dir)
-        old_file = new_dir / path.name
-        new_path = new_dir / new_file_name
-        old_file.rename(new_path)
-        return new_path
-    else:
-        new_path = path.with_name(new_file_name)
-        path.rename(new_path)
-        return new_path
-
-
-def _remove_suffix(path: Path, suffix: str) -> Path:
-    """Remove --blocked suffix from sprint file and its parent dir."""
-    new_file_name = path.name.replace(f"--{suffix}", "")
-    if path.parent.name.startswith("sprint-") and f"--{suffix}" in path.parent.name:
-        new_dir = path.parent.with_name(path.parent.name.replace(f"--{suffix}", ""))
-        path.parent.rename(new_dir)
-        old_file = new_dir / path.name
-        new_path = new_dir / new_file_name
-        old_file.rename(new_path)
-        return new_path
-    else:
-        new_path = path.with_name(new_file_name)
-        path.rename(new_path)
-        return new_path
 
 
 def _move_to_column(path: Path, kanban_dir: Path, target_col: str) -> Path:
@@ -456,12 +418,13 @@ completed: null
         if "status" in fields:
             new_status = fields["status"]
             if isinstance(new_status, SprintStatus):
-                current_status = _sprint_status_from_path(path)
                 _update_yaml(path, status=new_status.value)
 
-                # Remove --blocked suffix when resuming
+                # Move to appropriate column when resuming from blocked
+                current_status = _sprint_status_from_path(path)
                 if current_status is SprintStatus.BLOCKED and new_status is SprintStatus.IN_PROGRESS:
-                    path = _remove_suffix(path, "blocked")
+                    _write_history(path, "2-in-progress")
+                    path = _move_to_column(path, self._kanban_dir, "2-in-progress")
 
                 # Update state file
                 state = _read_state(self._kanban_dir, sprint_id) or {}
@@ -607,10 +570,8 @@ completed: null
         # Update filesystem
         _update_yaml(path, completed=_now_iso())
         _write_history(path, "4-done")
-        path = _add_suffix(path, "done")
-
-        in_epic, _ = _is_in_epic(path)
-        if not in_epic:
+        col = _column_of(path)
+        if col != "4-done":
             path = _move_to_column(path, self._kanban_dir, "4-done")
 
         # Update state file
@@ -708,7 +669,9 @@ completed: null
         # Update filesystem
         _update_yaml(path, blocked_at=_now_iso(), blocker=reason)
         _write_history(path, "5-blocked")
-        _add_suffix(path, "blocked")
+        col = _column_of(path)
+        if col != "5-blocked":
+            path = _move_to_column(path, self._kanban_dir, "5-blocked")
 
         # Update state file
         state = _read_state(self._kanban_dir, sprint_id) or {}
@@ -787,13 +750,6 @@ completed: null
         yaml = _read_yaml(path)
         goal = yaml.get("title", "")
         status = _sprint_status_from_path(path)
-
-        # Check YAML status for more precise state
-        yaml_status = yaml.get("status")
-        if yaml_status == "in-progress" and status == SprintStatus.TODO:
-            status = SprintStatus.IN_PROGRESS
-        elif yaml_status == "review" and status != SprintStatus.REVIEW:
-            status = SprintStatus.REVIEW
 
         in_epic, epic_id = _is_in_epic(path)
         if not epic_id:

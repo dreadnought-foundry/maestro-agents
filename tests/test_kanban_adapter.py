@@ -213,13 +213,13 @@ class TestCompleteSprint:
         assert done_t.from_status is SprintStatus.IN_PROGRESS
         assert done_t.to_status is SprintStatus.DONE
 
-    async def test_adds_done_suffix(self, adapter, kanban_dir):
+    async def test_moves_to_done_column(self, adapter, kanban_dir):
         sprint = await _make_sprint(adapter, tasks=[{"name": "A"}])
         await adapter.start_sprint(sprint.id)
         await adapter.advance_step(sprint.id)
         await adapter.complete_sprint(sprint.id)
-        # Should have --done suffix on filesystem
-        done_files = list(kanban_dir.glob("**/*--done*"))
+        # Sprint should be in 4-done column
+        done_files = list((kanban_dir / "4-done").glob("**/sprint-*_*.md"))
         assert len(done_files) >= 1
 
 
