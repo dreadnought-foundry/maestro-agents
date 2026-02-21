@@ -390,9 +390,9 @@ class KanbanApp(App):
         Binding("question_mark", "help_screen", "?=Help"),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, kanban_dir: Path | None = None) -> None:
         super().__init__()
-        self.kanban_dir = self._find_kanban_dir()
+        self.kanban_dir = kanban_dir or self._find_kanban_dir()
         self.columns: list[ColumnInfo] = []
         self.active_col_index: int = 0
         self.show_all_columns: bool = False
@@ -757,3 +757,9 @@ class KanbanApp(App):
             "[bold]Keys:[/] s=start  c=complete  x=reject  m=move  Left/Right=cols  Up/Down=cards  Enter=expand  d=detail  a=all cols  r=refresh  q=quit",
             timeout=6,
         )
+
+
+def run_board() -> None:
+    """Entry point for maestro-board CLI."""
+    app = KanbanApp()
+    app.run()

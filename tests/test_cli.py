@@ -27,13 +27,9 @@ class TestCLIModuleImports:
                 import src.execution.__main__  # noqa: F401
                 importlib.reload(src.execution.__main__)
 
-    def test_definitions_imports_without_sdk(self):
-        """definitions.py imports without SDK installed."""
-        from src.agents import definitions
-
-        # Module should be importable regardless of SDK availability
-        assert hasattr(definitions, "HAS_SDK")
-        assert hasattr(definitions, "ALL_AGENTS")
+    def test_agents_package_imports(self):
+        """src.agents package imports without error."""
+        import src.agents  # noqa: F401
 
     def test_execution_init_exports(self):
         """All execution __init__.py exports are importable."""

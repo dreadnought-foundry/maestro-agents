@@ -1,9 +1,11 @@
-"""CLI entry point for sprint execution and backlog grooming.
+"""CLI entry point for maestro-agents.
 
 Usage:
-  python -m src.execution run <sprint_id> [--project-root PATH] [--kanban-dir kanban]
-  python -m src.execution status <sprint_id> [--kanban-dir kanban]
-  python -m src.execution groom [--kanban-dir kanban] [--model sonnet] [--epic NUM]
+  maestro init [--kanban-dir kanban] [--no-interactive]
+  maestro run <sprint_id> [--project-root PATH] [--kanban-dir kanban] [--mock]
+  maestro status <sprint_id> [--kanban-dir kanban]
+  maestro groom [--kanban-dir kanban] [--model sonnet] [--epic NUM]
+  maestro board [--kanban-dir kanban]
 """
 
 from __future__ import annotations
@@ -14,9 +16,18 @@ import sys
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sprint execution CLI")
+    parser = argparse.ArgumentParser(
+        prog="maestro",
+        description="Maestro Agents — multi-agent sprint execution system",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
+    # init
+    init_parser = subparsers.add_parser("init", help="Initialize a new maestro project")
+    init_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory name (default: kanban)")
+    init_parser.add_argument("--no-interactive", action="store_true", help="Skip interactive prompts, use defaults")
+
+    # run
     run_parser = subparsers.add_parser("run", help="Run a sprint")
     run_parser.add_argument("sprint_id", help="Sprint ID to execute")
     run_parser.add_argument("--project-root", default=".", help="Project root path")
@@ -24,14 +35,19 @@ def main() -> None:
     run_parser.add_argument("--mock", action="store_true", help="Use mock agents (skip real execution)")
     run_parser.add_argument("--model", default="sonnet", help="Claude model (default: sonnet)")
 
+    # status
     status_parser = subparsers.add_parser("status", help="Show sprint status")
     status_parser.add_argument("sprint_id", help="Sprint ID to check")
     status_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
 
+    # groom
     groom_parser = subparsers.add_parser("groom", help="Run backlog grooming")
     groom_parser.add_argument("--kanban-dir", default="kanban", help="Kanban directory")
     groom_parser.add_argument("--model", default="sonnet", help="Model to use")
     groom_parser.add_argument("--epic", type=int, default=None, help="Epic number for mid-epic grooming")
+
+    # board
+    subparsers.add_parser("board", help="Launch the interactive kanban board")
 
     args = parser.parse_args()
 
@@ -39,12 +55,57 @@ def main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    if args.command == "run":
+    if args.command == "init":
+        _init_command(args)
+    elif args.command == "run":
         asyncio.run(_run_command(args))
     elif args.command == "status":
         asyncio.run(_status_command(args))
     elif args.command == "groom":
         asyncio.run(_groom_command(args))
+    elif args.command == "board":
+        _board_command()
+
+
+def _init_command(args) -> None:
+    from pathlib import Path
+
+    from src.execution.init import scaffold_project
+
+    root = Path.cwd()
+    interactive = not args.no_interactive
+
+    print("Initializing maestro project...\n")
+
+    create_claude_md = False
+    if interactive:
+        response = input("  Create CLAUDE.md with workflow instructions? [y/N] ")
+        create_claude_md = response.strip().lower() == "y"
+
+    created = scaffold_project(
+        root=root,
+        kanban_dir_name=args.kanban_dir,
+        create_claude_md=create_claude_md,
+        interactive=interactive,
+    )
+
+    if created:
+        print(f"\nCreated {len(created)} files/directories:")
+        for path in created:
+            print(f"  {path}")
+        print("\nNext steps:")
+        print("  1. Create a sprint file in kanban/0-backlog/")
+        print("  2. Run 'maestro board' to view your kanban board")
+        print("  3. Run 'maestro groom' to groom the backlog")
+    else:
+        print("Nothing to create — project already initialized.")
+
+
+def _board_command() -> None:
+    from kanban_tui.app import KanbanApp
+
+    app = KanbanApp()
+    app.run()
 
 
 async def _run_command(args) -> None:
@@ -63,6 +124,7 @@ async def _run_command(args) -> None:
         if not kanban_dir.exists():
             print(f"Error: Kanban directory not found: {kanban_dir}", file=sys.stderr)
             print("Use --mock for testing without a kanban directory.", file=sys.stderr)
+            print("Or run 'maestro init' to set up the project.", file=sys.stderr)
             sys.exit(1)
         backend = KanbanAdapter(kanban_dir)
         kanban_path = kanban_dir
@@ -141,6 +203,7 @@ async def _groom_command(args) -> None:
     kanban_dir = Path(args.kanban_dir)
     if not kanban_dir.exists():
         print(f"Kanban directory not found: {kanban_dir}", file=sys.stderr)
+        print("Run 'maestro init' to set up the project.", file=sys.stderr)
         sys.exit(1)
 
     agent = GroomingAgent(model=args.model)

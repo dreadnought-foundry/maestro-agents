@@ -1,41 +1,72 @@
 # maestro-agents
 
-Multi-agent sprint execution system built on [claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk). Evolved from [claude-maestro](https://github.com/dreadnought-foundry/claude-maestro).
+Multi-agent sprint execution system built on [claude-agent-sdk](https://github.com/anthropics/claude-agent-sdk).
 
 ## What is this?
 
 A team of specialized AI agents that execute software sprints autonomously:
 
+- **Planning Agent** — reads the sprint spec and codebase, produces contracts and strategy
 - **Product Engineer** — writes features and implementation code
 - **Test Runner** — executes test suites and reports results
 - **Quality Engineer** — reviews code for correctness, security, and standards
+- **Validation Agent** — verifies against acceptance criteria
 
-An **Orchestrator** coordinates the agents through a sprint's phases (planning → implementation → validation), using the claude-agent-sdk to manage Claude Code sessions.
+A **Sprint Runner** coordinates the agents through phases (Plan → TDD → Build → Validate → Review → Complete), using a kanban board for state management.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│           Orchestrator              │
-│     (claude-agent-sdk query())      │
-├──────────┬───────────┬──────────────┤
-│ Product  │   Test    │   Quality    │
-│ Engineer │  Runner   │  Engineer    │
-└──────────┴───────────┴──────────────┘
+┌─────────────────────────────────────────────┐
+│              Sprint Runner                   │
+│   Plan → TDD → Build → Validate → Review    │
+├──────────┬───────────┬──────────┬───────────┤
+│ Planning │ Product   │  Test    │ Quality   │
+│ Agent    │ Engineer  │  Runner  │ Engineer  │
+└──────────┴───────────┴──────────┴───────────┘
         │                    │
-   ClaudeCodeExecutor   Sprint Lifecycle
-   (SDK sessions)       (scripts/sprint_lifecycle.py)
+   ClaudeCodeExecutor    KanbanAdapter
+   (SDK sessions)        (filesystem state)
 ```
 
-- **Agents** use the SDK for reasoning tasks (writing code, running tests, reviewing)
-- **Lifecycle script** handles mechanical bookkeeping (move files, update YAML, manage state) — zero tokens, instant execution
+- **Execution engine** (`src/execution/`) — CLI + phase-based sprint runner
+- **Agent registry** (`src/agents/execution/`) — agent definitions and tool configs
+- **Kanban TUI** (`kanban_tui/`) — terminal UI for managing the sprint board
+
+## Installation
+
+```bash
+# Install as a global CLI tool
+uv tool install git+https://github.com/dreadnought-foundry/maestro-agents.git
+
+# Or for development
+git clone https://github.com/dreadnought-foundry/maestro-agents.git
+cd maestro-agents
+uv sync
+```
 
 ## Quick start
 
 ```bash
-uv sync
-make test          # 409+ tests, ~2s
-make test-all      # includes slow SDK integration tests
+# Initialize a project
+cd your-project
+maestro init
+
+# View the kanban board
+maestro board
+
+# Run a sprint
+maestro run <sprint_id>
+```
+
+## Running sprints
+
+```bash
+# Via CLI
+make run-sprint SPRINT=42
+
+# Via TUI
+make kanban
 ```
 
 ## Kanban board
@@ -47,21 +78,25 @@ kanban/
   0-backlog/
   1-todo/
   2-in-progress/
-  3-done/
-  4-blocked/
-  5-abandoned/
-  6-archived/
+  3-review/
+  4-done/
+  5-blocked/
+  6-abandoned/
+  7-archived/
 ```
 
-Lifecycle operations via CLI:
+The interactive TUI (`maestro board`) lets you start, complete, and reject sprints directly from the board.
+
+## Development
+
 ```bash
-python3 scripts/sprint_lifecycle.py create-sprint 30 "My Feature" --epic 7
-python3 scripts/sprint_lifecycle.py start-sprint 30
-python3 scripts/sprint_lifecycle.py complete-sprint 30
+uv sync
+make test          # run tests
+make test-fast     # parallel execution
+make test-all      # includes slow SDK integration tests
+make kanban        # launch TUI locally
 ```
 
 ## Lineage
 
-This project evolved from [claude-maestro](https://github.com/dreadnought-foundry/claude-maestro), which provides global Claude configuration and workflow skills. maestro-agents diverged to build a multi-agent execution layer on top of the claude-agent-sdk, replacing the single-agent subprocess model with a coordinated team approach.
-
-Reference implementations from maestro are preserved in `docs/reference/maestro-v1/`.
+This project evolved from [claude-maestro](https://github.com/dreadnought-foundry/claude-maestro). Reference implementations from maestro are preserved in `docs/reference/maestro-v1/`.
