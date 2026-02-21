@@ -9,6 +9,8 @@ completed: null
 history:
 - column: 2-in-progress
   timestamp: '2026-02-21T19:57:38Z'
+- column: 3-review
+  timestamp: '2026-02-21T20:11:54Z'
 ---
 
 # Sprint 37: Kanban History Tracking

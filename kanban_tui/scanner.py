@@ -107,7 +107,9 @@ def _title_from_filename(name: str) -> str:
     return cleaned.replace("-", " ").replace("_", " ").strip().title() or stem
 
 
-def _parse_sprint_md(md_path: Path, movable_path: Path, is_folder: bool) -> SprintInfo | None:
+def _parse_sprint_md(
+    md_path: Path, movable_path: Path, is_folder: bool, column: str | None = None,
+) -> SprintInfo | None:
     fm = parse_frontmatter(md_path)
     number = fm.get("sprint")
     # Fallback: parse sprint number from filename
@@ -116,8 +118,12 @@ def _parse_sprint_md(md_path: Path, movable_path: Path, is_folder: bool) -> Spri
     if number is None:
         return None
 
-    # Derive status from filesystem path, falling back to YAML for backward compat
-    status = _status_from_name(movable_path.name) or fm.get("status", "unknown")
+    # Derive status: path suffix > YAML > column directory > unknown
+    status = (
+        _status_from_name(movable_path.name)
+        or fm.get("status")
+        or COLUMN_TO_STATUS.get(column or "", "unknown")
+    )
 
     return SprintInfo(
         number=int(number),
@@ -166,6 +172,18 @@ STATUS_TO_COLUMN: dict[str, str] = {
     "aborted": "6-abandoned",
     "abandoned": "6-abandoned",
     "archived": "7-archived",
+}
+
+# Reverse mapping: column directory name → sprint status string
+COLUMN_TO_STATUS: dict[str, str] = {
+    "0-backlog": "backlog",
+    "1-todo": "todo",
+    "2-in-progress": "in-progress",
+    "3-review": "review",
+    "4-done": "done",
+    "5-blocked": "blocked",
+    "6-abandoned": "abandoned",
+    "7-archived": "archived",
 }
 
 
@@ -250,19 +268,19 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
                 continue
 
             if entry.is_dir() and entry.name.startswith("epic-"):
-                epic = _scan_epic(entry)
+                epic = _scan_epic(entry, column=col_name)
                 if epic and epic.number not in all_epics:
                     all_epics[epic.number] = (epic, col_name)
 
             elif entry.is_dir() and entry.name.startswith("sprint-"):
                 md_file = _find_sprint_md(entry)
                 if md_file:
-                    sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True)
+                    sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True, column=col_name)
                     if sprint:
                         all_standalone.append((sprint, col_name))
 
             elif entry.is_file() and entry.name.startswith("sprint-") and entry.suffix == ".md":
-                sprint = _parse_sprint_md(entry, movable_path=entry, is_folder=False)
+                sprint = _parse_sprint_md(entry, movable_path=entry, is_folder=False, column=col_name)
                 if sprint:
                     all_standalone.append((sprint, col_name))
 
@@ -304,6 +322,7 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
                     )
                     columns[target_col].epics.append(col_epic)
 
+
     # Distribute standalone sprints into their target display columns.
     for sprint, physical_col in all_standalone:
         target_col = _sprint_display_column(sprint, physical_col)
@@ -324,7 +343,7 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
     return result
 
 
-def _scan_epic(epic_dir: Path) -> EpicInfo | None:
+def _scan_epic(epic_dir: Path, column: str | None = None) -> EpicInfo | None:
     """Scan an epic directory for its metadata and sprints."""
     epic_md = epic_dir / "_epic.md"
     fm = parse_frontmatter(epic_md) if epic_md.exists() else {}
@@ -349,13 +368,13 @@ def _scan_epic(epic_dir: Path) -> EpicInfo | None:
         if entry.is_dir() and entry.name.startswith("sprint-"):
             md_file = _find_sprint_md(entry)
             if md_file:
-                sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True)
+                sprint = _parse_sprint_md(md_file, movable_path=entry, is_folder=True, column=column)
                 if sprint:
                     epic.sprints.append(sprint)
 
         # Sprint as flat file inside epic
         elif entry.is_file() and entry.name.startswith("sprint-") and entry.suffix == ".md":
-            sprint = _parse_sprint_md(entry, movable_path=entry, is_folder=False)
+            sprint = _parse_sprint_md(entry, movable_path=entry, is_folder=False, column=column)
             if sprint:
                 epic.sprints.append(sprint)
 
