@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("textual")
+
 from kanban_tui.scanner import (
     COLUMN_ORDER,
     EpicInfo,

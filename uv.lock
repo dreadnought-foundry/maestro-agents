@@ -291,7 +291,7 @@ wheels = [
 [[package]]
 name = "maestro-agents"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "claude-agent-sdk" },
     { name = "pyyaml" },

@@ -15,8 +15,5 @@ wheels/
 # Test/IDE
 .pytest_cache/
 
-# Runtime data
-.maestro/
-
 # Sprint state files (generated at runtime)
 .claude/sprint-*-state.json
