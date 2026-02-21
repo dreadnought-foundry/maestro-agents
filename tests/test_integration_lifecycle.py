@@ -199,19 +199,27 @@ class TestEpicSprintHappyPath:
         assert "3-review" in columns_visited
         assert "4-done" in columns_visited
 
-    async def test_epic_follows_sprint_column(self, adapter, kanban_dir):
-        """Epic dir physically lives in the same column as its sprint."""
+    async def test_epic_stays_sprint_moves(self, adapter, kanban_dir):
+        """Epic dir stays in place; only the sprint folder moves to the new column."""
         epic, sprint = await _create_epic_sprint(adapter, tasks=[{"name": "A"}])
 
+        # Epic starts in 1-todo
+        epic_dirs_todo = list((kanban_dir / "1-todo").glob("epic-*"))
+        assert len(epic_dirs_todo) >= 1
+
         await adapter.start_sprint(sprint.id)
-        # Epic dir should be in 2-in-progress
-        epic_dirs = list((kanban_dir / "2-in-progress").glob("epic-*"))
-        assert len(epic_dirs) >= 1
+        # Sprint moved to 2-in-progress (independently)
+        assert _sprint_column(kanban_dir, sprint.id) == "2-in-progress"
+        # Epic dir stays in 1-todo
+        epic_dirs_todo = list((kanban_dir / "1-todo").glob("epic-*"))
+        assert len(epic_dirs_todo) >= 1
 
         await adapter.advance_step(sprint.id)
         await adapter.move_to_review(sprint.id)
-        epic_dirs = list((kanban_dir / "3-review").glob("epic-*"))
-        assert len(epic_dirs) >= 1
+        assert _sprint_column(kanban_dir, sprint.id) == "3-review"
+        # Epic dir still in 1-todo
+        epic_dirs_todo = list((kanban_dir / "1-todo").glob("epic-*"))
+        assert len(epic_dirs_todo) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -509,32 +517,74 @@ class TestStatePersistenceAcrossAdapterInstances:
 # ---------------------------------------------------------------------------
 class TestMultipleSprintsInEpic:
 
-    async def test_multiple_sprints_tracked(self, adapter, kanban_dir):
-        """Create 3 sprints in one epic, start and complete first, start second."""
+    async def test_independent_sprint_movement(self, adapter, kanban_dir):
+        """Sprints in an epic move independently — starting/completing s1
+        does not affect s2 or s3.
+        """
         epic = await adapter.create_epic("Multi-Sprint Epic", "desc")
         s1 = await adapter.create_sprint(epic.id, "Sprint 1", tasks=[{"name": "A"}])
         s2 = await adapter.create_sprint(epic.id, "Sprint 2", tasks=[{"name": "B"}])
         s3 = await adapter.create_sprint(epic.id, "Sprint 3", tasks=[{"name": "C"}])
 
-        # Start and complete sprint 1
+        # All 3 start in 1-todo inside the epic
+        assert (await adapter.get_sprint(s1.id)).status is SprintStatus.TODO
+        assert (await adapter.get_sprint(s2.id)).status is SprintStatus.TODO
+        assert (await adapter.get_sprint(s3.id)).status is SprintStatus.TODO
+
+        # Start sprint 1 — only s1 moves to 2-in-progress
+        await adapter.start_sprint(s1.id)
+        assert _sprint_column(kanban_dir, s1.id) == "2-in-progress"
+        # s2 and s3 stay in 1-todo (inside the epic dir)
+        assert _sprint_column(kanban_dir, s2.id) == "1-todo"
+        assert _sprint_column(kanban_dir, s3.id) == "1-todo"
+
+        # Complete sprint 1 — only s1 moves to 4-done
+        await adapter.advance_step(s1.id)
+        await adapter.move_to_review(s1.id)
+        await adapter.complete_sprint(s1.id)
+        assert _sprint_column(kanban_dir, s1.id) == "4-done"
+
+        # s2 and s3 still in 1-todo
+        assert _sprint_column(kanban_dir, s2.id) == "1-todo"
+        assert _sprint_column(kanban_dir, s3.id) == "1-todo"
+
+    async def test_scanner_shows_epic_in_multiple_columns(self, adapter, kanban_dir):
+        """Scanner shows the epic in multiple columns when sprints are spread."""
+        epic = await adapter.create_epic("Multi-Sprint Epic", "desc")
+        s1 = await adapter.create_sprint(epic.id, "Sprint 1", tasks=[{"name": "A"}])
+        s2 = await adapter.create_sprint(epic.id, "Sprint 2", tasks=[{"name": "B"}])
+
+        # Complete s1 — it moves to 4-done; s2 stays in 1-todo
         await adapter.start_sprint(s1.id)
         await adapter.advance_step(s1.id)
         await adapter.move_to_review(s1.id)
         await adapter.complete_sprint(s1.id)
 
-        # Start sprint 2
-        await adapter.start_sprint(s2.id)
+        columns = scan_kanban(kanban_dir)
+        # Epic should appear in 1-todo (for s2) and 4-done (for s1)
+        epic_cols = []
+        for col in columns:
+            for ep in col.epics:
+                if ep.number == int(epic.id.split("-")[1]):
+                    epic_cols.append(col.name)
+        assert "1-todo" in epic_cols, f"Expected epic in 1-todo, found in {epic_cols}"
+        assert "4-done" in epic_cols, f"Expected epic in 4-done, found in {epic_cols}"
 
-        # Verify via adapter
-        assert (await adapter.get_sprint(s1.id)).status is SprintStatus.DONE
-        assert (await adapter.get_sprint(s2.id)).status is SprintStatus.IN_PROGRESS
-        assert (await adapter.get_sprint(s3.id)).status is SprintStatus.TODO
+    async def test_get_epic_finds_all_sprints(self, adapter, kanban_dir):
+        """adapter.get_epic() finds all 3 sprints even after s1 moves out."""
+        epic = await adapter.create_epic("Multi-Sprint Epic", "desc")
+        s1 = await adapter.create_sprint(epic.id, "Sprint 1", tasks=[{"name": "A"}])
+        s2 = await adapter.create_sprint(epic.id, "Sprint 2", tasks=[{"name": "B"}])
+        s3 = await adapter.create_sprint(epic.id, "Sprint 3", tasks=[{"name": "C"}])
 
-        # Verify sprint 3 is still in todo
-        # Note: epic-nested sprints all live in the same epic dir,
-        # which gets moved as a unit. After completing s1 the epic moved to 4-done,
-        # then starting s2 moves it to 2-in-progress. s3 is also in that dir.
-        assert _sprint_column(kanban_dir, s2.id) == "2-in-progress"
+        # Move s1 out
+        await adapter.start_sprint(s1.id)
+
+        fetched = await adapter.get_epic(epic.id)
+        assert len(fetched.sprint_ids) == 3
+        assert s1.id in fetched.sprint_ids
+        assert s2.id in fetched.sprint_ids
+        assert s3.id in fetched.sprint_ids
 
     async def test_all_sprints_listed_for_epic(self, adapter, kanban_dir):
         """All sprints in an epic are returned by list_sprints(epic_id)."""

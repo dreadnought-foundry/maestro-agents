@@ -270,6 +270,30 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
                 if sprint:
                     all_standalone.append((sprint, col_name))
 
+    # Reassociate: standalone sprints whose epic field matches a known epic
+    # should be moved back into that epic's sprint list.
+    epic_numbers = set(all_epics.keys())
+    truly_standalone: list[tuple[SprintInfo, str]] = []
+    for sprint, physical_col in all_standalone:
+        # epic_number may be an int (e.g. 1) or a string like "e-1"
+        epic_num = sprint.epic_number
+        if epic_num is not None:
+            if isinstance(epic_num, str):
+                m = re.match(r"e-(\d+)", str(epic_num))
+                epic_num = int(m.group(1)) if m else None
+            elif isinstance(epic_num, int):
+                pass
+            else:
+                epic_num = None
+        if epic_num is not None and epic_num in epic_numbers:
+            epic, _epic_col = all_epics[epic_num]
+            # Deduplicate by sprint number
+            if not any(s.number == sprint.number for s in epic.sprints):
+                epic.sprints.append(sprint)
+        else:
+            truly_standalone.append((sprint, physical_col))
+    all_standalone = truly_standalone
+
     # Second pass: distribute each epic's sprints into their target display columns.
     # The same epic may appear in multiple columns with different sprint subsets.
     # If an epic has no sprints in a column, it won't appear there (no empty epics).
@@ -279,7 +303,15 @@ def scan_kanban(kanban_dir: Path) -> list[ColumnInfo]:
         sprints_by_col: dict[str, list[SprintInfo]] = {}
         for sprint in epic.sprints:
             target_col = _sprint_display_column(sprint, physical_col)
-            if target_col not in columns:
+            # For sprints that moved out of the epic dir, use their own column
+            sprint_col = None
+            for part in sprint.movable_path.parts:
+                if part in [c for c in COLUMN_ORDER]:
+                    sprint_col = part
+                    break
+            if sprint_col and sprint_col in columns:
+                target_col = sprint_col
+            elif target_col not in columns:
                 target_col = physical_col  # fallback if column doesn't exist on disk
             sprints_by_col.setdefault(target_col, []).append(sprint)
 

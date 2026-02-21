@@ -190,23 +190,30 @@ def _is_in_epic(path: Path) -> tuple[bool, str | None]:
 
 
 def _move_to_column(path: Path, kanban_dir: Path, target_col: str) -> Path:
-    """Move a sprint file/folder to a target column. Returns new path."""
+    """Move a sprint file/folder to a target column. Returns new path.
+
+    When a sprint is inside an epic, only the sprint folder/file is moved
+    to the target column root — the epic directory stays in place. The
+    ``epic`` frontmatter field preserves the association.
+    """
     target_dir = kanban_dir / target_col
     target_dir.mkdir(parents=True, exist_ok=True)
 
     in_epic, _ = _is_in_epic(path)
     if in_epic:
-        # Move the entire epic folder
-        epic_dir = path
-        while not epic_dir.name.startswith("epic-"):
-            epic_dir = epic_dir.parent
-        new_epic_dir = target_dir / epic_dir.name
-        if new_epic_dir.exists():
-            rel = path.relative_to(epic_dir)
-            return new_epic_dir / rel
-        shutil.move(str(epic_dir), str(new_epic_dir))
-        rel = path.relative_to(epic_dir)
-        return new_epic_dir / rel
+        # Move just the sprint folder (or flat file) out of the epic
+        # to the target column root.
+        if path.parent.name.startswith("sprint-"):
+            # path is the .md inside a sprint subfolder
+            sprint_dir = path.parent
+            new_dir = target_dir / sprint_dir.name
+            shutil.move(str(sprint_dir), str(new_dir))
+            return new_dir / path.name
+        else:
+            # flat .md file directly inside epic dir
+            new_path = target_dir / path.name
+            shutil.move(str(path), str(new_path))
+            return new_path
     else:
         if path.parent.name.startswith("sprint-"):
             new_dir = target_dir / path.parent.name
@@ -711,7 +718,13 @@ completed: null
     # --- Parsing helpers ---
 
     def _parse_epic(self, epic_dir: Path) -> Epic:
-        """Parse an epic from its directory."""
+        """Parse an epic from its directory.
+
+        Sprints may live inside the epic folder **or** have been moved to
+        other columns independently.  We first glob inside ``epic_dir``,
+        then scan all columns for sprints whose YAML ``epic`` field
+        matches this epic's ID.  Deduplicate by sprint number.
+        """
         m = re.match(r"epic-(\d+)_", epic_dir.name)
         num = int(m.group(1)) if m else 0
         epic_id = f"e-{num}"
@@ -728,14 +741,53 @@ completed: null
         col = _column_of(epic_dir)
         status = COLUMN_TO_EPIC_STATUS.get(col, EpicStatus.DRAFT)
 
-        # Collect sprint IDs
-        sprint_ids = []
+        # Collect sprint IDs — first from inside the epic dir
+        seen_nums: set[int] = set()
+        sprint_ids: list[str] = []
         for md in epic_dir.glob("**/sprint-*_*.md"):
             if any(s in md.name for s in ["_postmortem", "_quality", "_contracts", "_deferred"]):
                 continue
             sm = re.match(r"sprint-(\d+)_", md.name)
             if sm:
-                sprint_ids.append(f"s-{int(sm.group(1))}")
+                snum = int(sm.group(1))
+                if snum not in seen_nums:
+                    seen_nums.add(snum)
+                    sprint_ids.append(f"s-{snum}")
+
+        # Also scan all columns for sprints that moved out of the epic
+        for col_name in COLUMNS:
+            col_dir = self._kanban_dir / col_name
+            if not col_dir.exists():
+                continue
+            for md in col_dir.glob("sprint-*_*/**/*.md"):
+                if any(s in md.name for s in ["_postmortem", "_quality", "_contracts", "_deferred"]):
+                    continue
+                sm = re.match(r"sprint-(\d+)_", md.name)
+                if not sm:
+                    continue
+                snum = int(sm.group(1))
+                if snum in seen_nums:
+                    continue
+                fm = _read_yaml(md)
+                fm_epic = fm.get("epic", "")
+                if fm_epic and str(fm_epic) == epic_id or str(fm_epic) == str(num):
+                    seen_nums.add(snum)
+                    sprint_ids.append(f"s-{snum}")
+            # Also check flat sprint .md files at column root
+            for md in col_dir.glob("sprint-*_*.md"):
+                if any(s in md.name for s in ["_postmortem", "_quality", "_contracts", "_deferred"]):
+                    continue
+                sm = re.match(r"sprint-(\d+)_", md.name)
+                if not sm:
+                    continue
+                snum = int(sm.group(1))
+                if snum in seen_nums:
+                    continue
+                fm = _read_yaml(md)
+                fm_epic = fm.get("epic", "")
+                if fm_epic and (str(fm_epic) == epic_id or str(fm_epic) == str(num)):
+                    seen_nums.add(snum)
+                    sprint_ids.append(f"s-{snum}")
 
         return Epic(
             id=epic_id,
