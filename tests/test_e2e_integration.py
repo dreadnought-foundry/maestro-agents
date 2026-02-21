@@ -269,7 +269,6 @@ async def test_run_sprint_convenience_function():
 
 async def test_create_registry_returns_real_agents():
     """create_registry() wires real agents with ClaudeCodeExecutor."""
-    pytest.importorskip("claude_agent_sdk")
     from src.agents.execution.product_engineer import ProductEngineerAgent
     from src.agents.execution.quality_engineer import QualityEngineerAgent
     from src.agents.execution.test_runner import TestRunnerAgent
