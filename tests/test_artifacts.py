@@ -234,7 +234,7 @@ class TestFileWriting:
         content = path.read_text()
         assert "Postmortem" in content
         assert "s-22" in content
-        assert "Wire dependencies" in md if (md := content) else False
+        assert "Wire dependencies" in content
 
 
 # ---------------------------------------------------------------------------
