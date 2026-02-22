@@ -25,6 +25,16 @@ uv run pytest tests/ -v -n auto --run-slow
 - `kanban_tui/` — Textual-based kanban board TUI
 - `Makefile` — common shortcuts (`make test`, `make test-fast`, `make test-all`)
 
+## Slash Commands
+
+Project-local commands live in `.claude/commands/`:
+
+- `/epic-new <title>` — Create a new epic folder in `kanban/1-todo/` with `_epic.md`
+- `/sprint-new <title> [--epic=N] [--type=TYPE]` — Create a new sprint dir + spec file
+- `/create-spec <title> [--dir=PATH]` — Create a standalone spec document
+
+All commands auto-number by scanning existing `kanban/` directories.
+
 ## Key Conventions
 
 - `claude-agent-sdk` is a **required** dependency, not optional. Do not use
