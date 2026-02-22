@@ -28,7 +28,9 @@ EPIC_COLORS = ["cyan", "green", "magenta", "yellow", "blue", "red"]
 STANDALONE_COLOR = "white"
 
 
-def _epic_color(epic_number: int) -> str:
+def _epic_color(epic_number: int | None) -> str:
+    if not isinstance(epic_number, int):
+        return STANDALONE_COLOR
     return EPIC_COLORS[epic_number % len(EPIC_COLORS)]
 
 

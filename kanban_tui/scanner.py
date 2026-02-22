@@ -43,6 +43,27 @@ class ColumnInfo:
     standalone_sprints: list[SprintInfo] = field(default_factory=list)
 
 
+def _normalize_epic_number(value) -> int | None:
+    """Convert an epic reference to an int, or None if not parseable.
+
+    Handles plain ints (``1``), numeric strings (``"1"``), and prefixed
+    strings like ``"e-1"``.
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        m = re.match(r"e-(\d+)", value)
+        if m:
+            return int(m.group(1))
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def parse_frontmatter(filepath: Path) -> dict:
     """Extract YAML frontmatter from a markdown file."""
     try:
@@ -129,7 +150,7 @@ def _parse_sprint_md(
         title=fm.get("title", _title_from_filename(md_path.name)),
         status=status,
         sprint_type=fm.get("type", ""),
-        epic_number=fm.get("epic"),
+        epic_number=_normalize_epic_number(fm.get("epic")),
         path=md_path,
         movable_path=movable_path,
         is_folder=is_folder,

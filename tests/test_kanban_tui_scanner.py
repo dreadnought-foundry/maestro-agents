@@ -13,6 +13,7 @@ from kanban_tui.scanner import (
     EpicInfo,
     SprintInfo,
     _find_sprint_md,
+    _normalize_epic_number,
     _sprint_display_column,
     parse_frontmatter,
     scan_kanban,
@@ -749,3 +750,54 @@ class TestMainColumns:
     def test_does_not_include_backlog_or_archived(self):
         assert "0-backlog" not in MAIN_COLUMNS
         assert "7-archived" not in MAIN_COLUMNS
+
+
+# ---------------------------------------------------------------------------
+# _normalize_epic_number
+# ---------------------------------------------------------------------------
+
+class TestNormalizeEpicNumber:
+    def test_none(self):
+        assert _normalize_epic_number(None) is None
+
+    def test_int(self):
+        assert _normalize_epic_number(1) == 1
+
+    def test_prefixed_string(self):
+        assert _normalize_epic_number("e-1") == 1
+        assert _normalize_epic_number("e-42") == 42
+
+    def test_numeric_string(self):
+        assert _normalize_epic_number("3") == 3
+
+    def test_garbage_string(self):
+        assert _normalize_epic_number("foo") is None
+
+    def test_float_returns_none(self):
+        assert _normalize_epic_number(1.5) is None
+
+
+class TestEpicNumberNormalizedDuringScan:
+    """Ensure sprint scanning normalizes 'e-N' epic references to ints."""
+
+    def test_string_epic_becomes_int(self, tmp_path):
+        kanban = tmp_path / "kanban"
+        for col in COLUMN_ORDER:
+            (kanban / col).mkdir(parents=True)
+
+        sprint_dir = kanban / "1-todo" / "sprint-01_test"
+        sprint_dir.mkdir()
+        (sprint_dir / "sprint-01_test.md").write_text(
+            "---\nsprint: 1\ntitle: Test\ntype: backend\n"
+            "epic: e-1\nstatus: todo\ncreated: 2026-01-01T00:00:00Z\n"
+            "started: null\ncompleted: null\nhours: null\n---\n"
+        )
+
+        board = scan_kanban(kanban)
+        for col in board:
+            for s in col.standalone_sprints:
+                if s.number == 1:
+                    assert s.epic_number == 1
+                    assert isinstance(s.epic_number, int)
+                    return
+        pytest.fail("Sprint not found in scan results")
