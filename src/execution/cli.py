@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from importlib.metadata import version
 
 
 def main() -> None:
@@ -20,6 +21,7 @@ def main() -> None:
         prog="maestro",
         description="Maestro Agents — multi-agent sprint execution system",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('maestro-agents')}")
     subparsers = parser.add_subparsers(dest="command")
 
     # init
