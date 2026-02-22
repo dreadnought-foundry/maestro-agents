@@ -618,7 +618,7 @@ class KanbanApp(App):
         return f"sprint-{sprint.number}"
 
     async def action_start_sprint(self) -> None:
-        """Start a sprint: move from Todo to In Progress."""
+        """Start a sprint: move to In Progress and run execution in background."""
         if not self._is_in_todo_column():
             self.notify("Start is only available for sprints in the Todo column", severity="warning")
             return
@@ -629,6 +629,7 @@ class KanbanApp(App):
 
         sprint = card.sprint
 
+        # Step 1: Move card to in-progress immediately
         try:
             from src.adapters.kanban import KanbanAdapter
 
@@ -647,12 +648,37 @@ class KanbanApp(App):
             else:
                 shutil.move(str(src), str(target / src.name))
 
-        self.notify(
-            f"S-{sprint.number:02d} moved to In Progress. "
-            f"Run 'maestro run {sprint.number}' to execute.",
-            severity="information",
-        )
         await self.action_refresh()
+        self.notify(f"S-{sprint.number:02d} started — running execution engine...")
+
+        # Step 2: Run execution engine in background worker (non-blocking)
+        sprint_num = sprint.number
+        kanban_dir = self.kanban_dir
+
+        async def _run_engine() -> None:
+            from src.adapters.kanban import KanbanAdapter
+            from src.execution.convenience import run_sprint
+
+            be = KanbanAdapter(kanban_dir)
+            sid = f"sprint-{sprint_num}"
+            result = await run_sprint(sid, backend=be, kanban_dir=kanban_dir)
+
+            if result.success:
+                if result.stopped_at_review:
+                    self.notify(
+                        f"S-{sprint_num:02d} ready for review! "
+                        f"({len(result.phase_results)} phases complete)",
+                        severity="information",
+                    )
+                else:
+                    self.notify(f"S-{sprint_num:02d} completed!", severity="information")
+            else:
+                phase = result.current_phase.value.upper() if result.current_phase else "unknown"
+                self.notify(f"S-{sprint_num:02d} blocked at {phase}", severity="error")
+
+            self.run_worker(self.action_refresh())
+
+        self.run_worker(_run_engine())
 
     async def action_complete_review(self) -> None:
         if not self._is_in_review_column():
