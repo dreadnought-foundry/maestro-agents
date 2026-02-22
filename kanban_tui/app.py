@@ -616,7 +616,7 @@ class KanbanApp(App):
         return f"sprint-{sprint.number}"
 
     async def action_start_sprint(self) -> None:
-        """Start a sprint: run the full execution engine (PLAN → VALIDATE → REVIEW)."""
+        """Start a sprint: move from Todo to In Progress."""
         if not self._is_in_todo_column():
             self.notify("Start is only available for sprints in the Todo column", severity="warning")
             return
@@ -626,36 +626,30 @@ class KanbanApp(App):
             return
 
         sprint = card.sprint
-        self.notify(f"Starting S-{sprint.number:02d}... (PLAN → TDD → BUILD → VALIDATE)")
 
         try:
             from src.adapters.kanban import KanbanAdapter
-            from src.execution.convenience import run_sprint
 
             backend = KanbanAdapter(self.kanban_dir)
             sprint_id = self._get_sprint_id(sprint)
-
-            result = await run_sprint(
-                sprint_id,
-                backend=backend,
-                kanban_dir=self.kanban_dir,
-            )
-
-            if result.success:
-                if result.stopped_at_review:
-                    self.notify(
-                        f"S-{sprint.number:02d} ready for review! "
-                        f"({len(result.phase_results)} phases complete)",
-                        severity="information",
-                    )
-                else:
-                    self.notify(f"S-{sprint.number:02d} completed!", severity="information")
+            await backend.start_sprint(sprint_id)
+        except Exception:
+            # Fallback to filesystem move
+            write_history_entry(sprint.path, "2-in-progress")
+            src = sprint.movable_path
+            parent = src.parent
+            target = self.kanban_dir / "2-in-progress"
+            target.mkdir(parents=True, exist_ok=True)
+            if parent.name.startswith("epic-"):
+                shutil.move(str(parent), str(target / parent.name))
             else:
-                phase = result.current_phase.value.upper() if result.current_phase else "unknown"
-                self.notify(f"S-{sprint.number:02d} blocked at {phase}", severity="error")
-        except Exception as e:
-            self.notify(f"S-{sprint.number:02d} failed: {e}", severity="error")
+                shutil.move(str(src), str(target / src.name))
 
+        self.notify(
+            f"S-{sprint.number:02d} moved to In Progress. "
+            f"Run 'maestro run {sprint.number}' to execute.",
+            severity="information",
+        )
         await self.action_refresh()
 
     async def action_complete_review(self) -> None:
